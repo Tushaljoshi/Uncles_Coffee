@@ -154,41 +154,25 @@ const TopBar = ({ toggleSidebar }) => {
       title: "Dashboard",
       subtitle: "Manage platform activity, users & performance",
     },
-    "/users": {
-      title: "Users",
-      subtitle: "Manage all registered users & actions",
-    },
     "/profile": {
       title: "User Profiles",
       subtitle: "View complete user details & verification",
     },
-    "/transactions": {
-      title: "Transactions",
-      subtitle: "Monitor withdrawals, deposits & investment logs",
+    "/chats": {
+      title: "Chats",
+      subtitle: "Manage chat conversations with users",
     },
-    "/deal": {
-      title: "Manage Deals",
-      subtitle: "Create & manage investment opportunities",
-    },
-    "/kyc": {
-      title: "KYC Verification",
-      subtitle: "Verify user identity & approve KYC details",
-    },
-    "/documents": {
-      title: "Documents",
-      subtitle: "Review & approve user uploaded documents",
-    },
-    "/refer": {
+    "/referral": {
       title: "Referral System",
       subtitle: "Track invites & reward distribution",
     },
-    "/support": {
-      title: "Support Center",
-      subtitle: "Handle user complaints & issues",
+    "/products": {
+      title: "Products",
+      subtitle: "Manage all products",
     },
-    "/usercontact": {
-      title: "User Querries",
-      subtitle: " Manage queries submitted from contact Form",
+    "/help": {
+      title: "Help Center",
+      subtitle: "Manage help center",
     },
   };
 

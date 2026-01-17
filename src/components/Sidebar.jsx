@@ -24,7 +24,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     {
       section: "Main Menu",
       items: [
-        { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
         { label: "User Profiles", icon: UserCircle, path: "/profile" },
         { label: "Referral Transaction", icon: CreditCard, path: "/referral" },
         { label: "Products", icon: Package, path: "/products" },
