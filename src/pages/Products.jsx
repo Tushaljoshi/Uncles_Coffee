@@ -9,17 +9,9 @@ import {
 } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
+import { collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "../firebase.js";
-import {
-    collection,
-    getDocs,
-    addDoc,
-    deleteDoc,
-    doc,
-    query,
-    orderBy,
-    Timestamp,
-} from "firebase/firestore";
+
 
 const Products = () => {
     const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
