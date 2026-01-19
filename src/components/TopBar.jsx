@@ -174,6 +174,10 @@ const TopBar = ({ toggleSidebar }) => {
       title: "Help Center",
       subtitle: "Manage help center",
     },
+    "/add-banner": {
+      title: "Add Banners",
+      subtitle: "Manage add banners",
+    },
   };
 
   const currentPage = pageInfo[location.pathname] || {

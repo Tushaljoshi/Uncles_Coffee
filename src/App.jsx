@@ -4,7 +4,8 @@ import LoginForm from "./components/LoginForm";
 import Products from "./pages/Products";
 import Referral from "./pages/Refferal";
 import Dashboard from "./pages/Dashboard";
-import Chats from "./pages/Chats"
+import Chats from "./pages/Chats";
+import AddBanner from "./pages/AddBanner";
 import Documents from "./pages/Documents";
 import Profile from "./pages/Profile"
 import HelpSupport from "./pages/Help&Support";
@@ -19,6 +20,7 @@ function App() {
         <Route path="/products" element={<Products />} />
         <Route path="/referral" element={<Referral/>} />
         <Route path="/chats" element={<Chats/>} />
+        <Route path="/add-banner" element={<AddBanner/>} />
         <Route path="/documents" element={<Documents/>} />
         <Route path="/profile" element={<Profile/>} />
         <Route path="/help" element={<HelpSupport/>} />
