@@ -2,10 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Search, X, CheckCircle, XCircle, Eye } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
-import { db, realtimeDb } from "../firebase.js";
-import { get, ref } from "firebase/database";
-import { collection, getDocs } from "firebase/firestore";
-
 const Documents = () => {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [searchQuery, setSearchQuery] = useState("");
