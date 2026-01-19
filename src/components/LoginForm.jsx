@@ -65,7 +65,7 @@ const LoginForm = () => {
 
         setTimeout(() => {
           setPopup({ show: false, type: "", message: "" });
-          navigate("/dashboard");
+          navigate("/profile");
         }, 1000);
       } else {
         setError("Invalid admin credentials!");
