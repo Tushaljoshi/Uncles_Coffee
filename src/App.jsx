@@ -1,15 +1,18 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import LoginForm from "./components/LoginForm";
-import Products from "./pages/Products";
+import MechanicServices from "./pages/MechanicServices";
 import Referral from "./pages/Refferal";
 import Dashboard from "./pages/Dashboard";
 import Chats from "./pages/Chats";
 import AddBanner from "./pages/AddBanner";
-import Documents from "./pages/Documents";
-import Profile from "./pages/Profile"
+import Service from "./pages/CreateService";
+import Profile from "./pages/CustomerProfile"
+import MechanicProfile from "./pages/MechanicProfile"
 import HelpSupport from "./pages/Help&Support";
-import UserInvestment from "./pages/UserInvestment";
+import Dispute from "./pages/Dispute";
+import Plan from "./pages/CreatePlan"
+import UserWallet from "./pages/UserWallet"
 
 function App() {
   return (
@@ -17,14 +20,17 @@ function App() {
       <Routes>
         <Route path="/" element={<LoginForm />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/products" element={<Products />} />
+        <Route path="/mechanicaservices" element={<MechanicServices />} />
         <Route path="/referral" element={<Referral/>} />
         <Route path="/chats" element={<Chats/>} />
         <Route path="/add-banner" element={<AddBanner/>} />
-        <Route path="/documents" element={<Documents/>} />
-        <Route path="/profile" element={<Profile/>} />
+        <Route path="/service" element={<Service/>} />
+        <Route path="/customer-profile" element={<Profile/>} />
+        <Route path="/mechanic-profile" element={<MechanicProfile/>} />
         <Route path="/help" element={<HelpSupport/>} />
-        <Route path="/investment" element={<UserInvestment/>} />
+        <Route path="/dispute" element={<Dispute/>} />
+        <Route path="/plan" element={<Plan/>} />
+        <Route path="/userwallet" element={<UserWallet/>} />
       </Routes>
     </Router>
   );

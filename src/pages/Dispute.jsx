@@ -11,89 +11,81 @@ import {
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
-/* ================= DUMMY REPORT DATA ================= */
+/* ================= DUMMY DISPUTE DATA ================= */
 
-const DUMMY_REPORTS = [
+const DUMMY_DISPUTES = [
   {
     id: 1,
-    reportId: "SUP-23456",
+    disputeId: "DS-226412",
+    service: "General Service",
+    vehicle: "Hyundai i20 | Petrol | MH 12 AB 1234",
+    dateTime: "28 Dec, 2025 | 10:15 AM",
     username: "Vivek Sharma",
-    contactEmail: "vivek054@gmail.com",
-    issueCategory: "Payment Issue",
-    description: "Payment was deducted but booking not confirmed.",
-    status: "pending",
-    createdAt: new Date("2024-11-29T10:15:00"),
+    email: "vivek054@gmail.com",
+    reason: "Unsatisfactory service quality",
+    description: "Mechanic did not complete service properly.",
+    status: "submitted",
+    createdAt: "29 Nov, 10:15 AM",
   },
   {
     id: 2,
-    reportId: "SUP-23457",
+    disputeId: "DS-226413",
+    service: "Brake Service",
+    vehicle: "Honda City | Petrol | DL 01 AA 7788",
+    dateTime: "25 Dec, 2025 | 04:30 PM",
     username: "Ananya Verma",
-    contactEmail: "ananya@gmail.com",
-    issueCategory: "Service Quality",
-    description: "Mechanic arrived late and service was incomplete.",
-    status: "in-progress",
-    createdAt: new Date("2024-11-28T14:30:00"),
-  },
-  {
-    id: 3,
-    reportId: "SUP-23458",
-    username: "Rahul Mehta",
-    contactEmail: "rahul.mehta@gmail.com",
-    issueCategory: "App Issue",
-    description: "App crashes while making payment.",
-    status: "resolved",
-    createdAt: new Date("2024-11-27T09:10:00"),
+    email: "ananya@gmail.com",
+    reason: "Incorrect charges & bill discrepancy",
+    description: "Charged more than estimated amount.",
+    status: "under-review",
+    createdAt: "28 Nov, 02:20 PM",
   },
 ];
 
-const STATUS_STEPS = ["pending", "in-progress", "resolved"];
+const STATUS_FLOW = [
+  "submitted",
+  "under-review",
+  "in-progress",
+  "resolved",
+];
 
-const Reports = () => {
+const AdminDisputePage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
-  const [reports, setReports] = useState(DUMMY_REPORTS);
-  const [selectedReport, setSelectedReport] = useState(null);
+  const [disputes, setDisputes] = useState(DUMMY_DISPUTES);
+  const [selectedDispute, setSelectedDispute] = useState(null);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterCategory, setFilterCategory] = useState("all");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
   /* ================= FILTER LOGIC ================= */
 
-  const filteredReports = reports.filter((r) => {
+  const filteredDisputes = disputes.filter((d) => {
     const matchSearch =
-      r.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.contactEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.reportId.toLowerCase().includes(searchQuery.toLowerCase());
+      d.username.toLowerCase().includes(search.toLowerCase()) ||
+      d.email.toLowerCase().includes(search.toLowerCase()) ||
+      d.disputeId.toLowerCase().includes(search.toLowerCase());
 
-    const matchStatus = filterStatus === "all" || r.status === filterStatus;
-    const matchCategory =
-      filterCategory === "all" || r.issueCategory === filterCategory;
+    const matchStatus =
+      statusFilter === "all" || d.status === statusFilter;
 
-    return matchSearch && matchStatus && matchCategory;
+    return matchSearch && matchStatus;
   });
 
-  /* ================= UPDATE STATUS (LOCAL) ================= */
+  /* ================= UPDATE STATUS ================= */
 
-  const updateStatus = (id, status) => {
-    setReports((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status } : r))
+  const updateStatus = (id, newStatus) => {
+    setDisputes((prev) =>
+      prev.map((d) =>
+        d.id === id ? { ...d, status: newStatus } : d
+      )
     );
 
-    setSelectedReport((prev) =>
-      prev ? { ...prev, status } : null
+    setSelectedDispute((prev) =>
+      prev ? { ...prev, status: newStatus } : null
     );
   };
-
-  const formatDate = (date) =>
-    date.toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -107,10 +99,10 @@ const Reports = () => {
           <div className="flex justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-800">
-                Support Tickets
+                Dispute Management
               </h1>
               <p className="text-sm text-gray-500">
-                Manage customer support issues
+                Manage disputes raised by customers
               </p>
             </div>
 
@@ -126,35 +118,23 @@ const Reports = () => {
               <Search size={18} className="absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by name, email or ticket ID"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name, email or dispute ID"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 className="pl-10 w-full py-2 border rounded-lg"
               />
             </div>
 
             <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
               className="border rounded-lg px-4 py-2"
             >
               <option value="all">All Status</option>
-              <option value="pending">Open</option>
-              <option value="in-progress">In Process</option>
+              <option value="submitted">Submitted</option>
+              <option value="under-review">Under Review</option>
+              <option value="in-progress">In Progress</option>
               <option value="resolved">Resolved</option>
-            </select>
-
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="border rounded-lg px-4 py-2"
-            >
-              <option value="all">All Categories</option>
-              <option value="Payment Issue">Payment Issue</option>
-              <option value="Booking Issue">Booking Issue</option>
-              <option value="Service Quality">Service Quality</option>
-              <option value="App Issue">App Issue</option>
-              <option value="Other">Other</option>
             </select>
           </div>
 
@@ -164,32 +144,28 @@ const Reports = () => {
               <thead className="bg-gray-100">
                 <tr>
                   <th className="p-4 text-left">User</th>
-                  <th className="p-4 text-left">Issue</th>
+                  <th className="p-4 text-left">Service</th>
                   <th className="p-4 text-center">Status</th>
                   <th className="p-4 text-center">Date</th>
                   <th className="p-4 text-center">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredReports.length ? (
-                  filteredReports.map((r) => (
-                    <tr key={r.id} className="border-t hover:bg-gray-50">
+                {filteredDisputes.length ? (
+                  filteredDisputes.map((d) => (
+                    <tr key={d.id} className="border-t hover:bg-gray-50">
                       <td className="p-4">
-                        <p className="font-medium">{r.username}</p>
-                        <p className="text-xs text-gray-500">
-                          {r.contactEmail}
-                        </p>
+                        <p className="font-medium">{d.username}</p>
+                        <p className="text-xs text-gray-500">{d.email}</p>
                       </td>
-                      <td className="p-4">{r.issueCategory}</td>
+                      <td className="p-4">{d.service}</td>
                       <td className="p-4 text-center capitalize">
-                        {r.status.replace("-", " ")}
+                        {d.status.replace("-", " ")}
                       </td>
-                      <td className="p-4 text-center">
-                        {formatDate(r.createdAt)}
-                      </td>
+                      <td className="p-4 text-center">{d.createdAt}</td>
                       <td className="p-4 text-center">
                         <button
-                          onClick={() => setSelectedReport(r)}
+                          onClick={() => setSelectedDispute(d)}
                           className="text-red-600 font-medium"
                         >
                           View
@@ -200,8 +176,11 @@ const Reports = () => {
                 ) : (
                   <tr>
                     <td colSpan="5" className="p-12 text-center">
-                      <FileText size={40} className="mx-auto text-gray-300 mb-2" />
-                      <p className="text-gray-500">No reports found</p>
+                      <FileText
+                        size={40}
+                        className="mx-auto text-gray-300 mb-2"
+                      />
+                      <p className="text-gray-500">No disputes found</p>
                     </td>
                   </tr>
                 )}
@@ -211,32 +190,33 @@ const Reports = () => {
         </main>
       </div>
 
-      {/* ================= MODAL ================= */}
-      {selectedReport && (
+      {/* ================= DISPUTE MODAL ================= */}
+      {selectedDispute && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden">
             <div className="p-5 border-b flex justify-between">
-              <h2 className="font-semibold">Ticket Status</h2>
-              <button onClick={() => setSelectedReport(null)}>
+              <h2 className="font-semibold">Dispute Status</h2>
+              <button onClick={() => setSelectedDispute(null)}>
                 <X />
               </button>
             </div>
 
             <div className="p-5 space-y-4">
               <div className="bg-red-50 p-4 rounded-xl">
-                <p className="text-sm font-medium">Ticket ID</p>
+                <p className="text-sm font-medium">Dispute ID</p>
                 <p className="text-sm text-gray-600">
-                  #{selectedReport.reportId}
+                  #{selectedDispute.disputeId}
                 </p>
               </div>
 
+              {/* STATUS TIMELINE */}
               <div>
                 <h3 className="font-medium mb-2">Status</h3>
-                {STATUS_STEPS.map((s, i) => (
+                {STATUS_FLOW.map((s, i) => (
                   <div key={s} className="flex items-center gap-3 mb-2">
                     <div
                       className={`w-3 h-3 rounded-full ${
-                        STATUS_STEPS.indexOf(selectedReport.status) >= i
+                        STATUS_FLOW.indexOf(selectedDispute.status) >= i
                           ? "bg-red-600"
                           : "border"
                       }`}
@@ -249,25 +229,30 @@ const Reports = () => {
               </div>
 
               <p className="text-sm text-gray-700">
-                {selectedReport.description}
+                <strong>Reason:</strong> {selectedDispute.reason}
+              </p>
+
+              <p className="text-sm text-gray-600">
+                {selectedDispute.description}
               </p>
 
               <select
-                value={selectedReport.status}
+                value={selectedDispute.status}
                 onChange={(e) =>
-                  updateStatus(selectedReport.id, e.target.value)
+                  updateStatus(selectedDispute.id, e.target.value)
                 }
                 className="w-full border rounded-lg px-4 py-2"
               >
-                <option value="pending">Open</option>
-                <option value="in-progress">In Process</option>
+                <option value="submitted">Submitted</option>
+                <option value="under-review">Under Review</option>
+                <option value="in-progress">In Progress</option>
                 <option value="resolved">Resolved</option>
               </select>
 
               <button
                 onClick={() =>
                   window.open(
-                    `mailto:${selectedReport.contactEmail}`,
+                    `mailto:${selectedDispute.email}`,
                     "_blank"
                   )
                 }
@@ -283,4 +268,4 @@ const Reports = () => {
   );
 };
 
-export default Reports;
+export default AdminDisputePage;

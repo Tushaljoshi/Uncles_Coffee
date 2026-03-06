@@ -11,6 +11,8 @@ import {
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
+const BASE_URL = import.meta.env.VITE_API_URL || "https://swap-street-backend-941l.onrender.com";
+
 const Chats = () => {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [selectedChat, setSelectedChat] = useState(null);
@@ -30,8 +32,7 @@ const Chats = () => {
     try {
       setLoading(true);
 
-      const API_URL =
-        "https://swap-street-backend-4sr7.onrender.com/api/admin/admin/chats";
+      const API_URL =`${BASE_URL}/api/admin/admin/chats`;
 
       const response = await fetch(API_URL, {
         method: "GET",

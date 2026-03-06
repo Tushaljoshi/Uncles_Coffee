@@ -6,10 +6,9 @@ import { db } from "../firebase.js";
 import {
     collection,
     getDocs,
-    query,
-    orderBy,
-    where,
 } from "firebase/firestore";
+
+const BASE_URL = import.meta.env.VITE_API_URL || "https://swap-street-backend-941l.onrender.com";
 
 const Referrals = () => {
     const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
@@ -20,112 +19,176 @@ const Referrals = () => {
     const [sort, setSort] = useState("Latest");
     const [referralData, setReferralData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [userProfiles, setUserProfiles] = useState({});
+    const [selectedUserDetails, setSelectedUserDetails] = useState(null);
+    const [loadingDetails, setLoadingDetails] = useState(false);
 
     const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-    // Fetch all referral data
+    // Fetch user profiles from Firebase
+    const fetchUserProfiles = async () => {
+        try {
+            const profilesSnapshot = await getDocs(collection(db, "seller_profiles"));
+            const profilesMap = {};
+            
+            profilesSnapshot.docs.forEach((docSnapshot) => {
+                const data = docSnapshot.data();
+                const userId = docSnapshot.id;
+                profilesMap[userId] = {
+                    id: userId,
+                    username: data.profileInfo?.username || "Unknown User",
+                    email: data.auth?.email || "N/A",
+                    phone: data.auth?.phone || "N/A",
+                    city: data.profileInfo?.city || data.address?.city || "N/A",
+                };
+            });
+            
+            setUserProfiles(profilesMap);
+            return profilesMap;
+        } catch (error) {
+            console.error("Error fetching user profiles:", error);
+            return {};
+        }
+    };
+
+    // Convert timestamp to Date
+    const convertTimestamp = (timestamp) => {
+        if (!timestamp) return null;
+        if (timestamp._seconds) {
+            return new Date(timestamp._seconds * 1000 + (timestamp._nanoseconds || 0) / 1000000);
+        }
+        if (typeof timestamp === 'string') {
+            return new Date(timestamp);
+        }
+        return new Date(timestamp);
+    };
+
+    // Fetch all referral data from API
     const fetchReferralData = async () => {
         try {
             setLoading(true);
 
-            // Fetch referrals collection
-            const referralsSnapshot = await getDocs(
-                query(collection(db, "referrals"), orderBy("createdAt", "desc"))
-            );
+            // Fetch user profiles first
+            const profilesMap = await fetchUserProfiles();
 
-            // Fetch all seller profiles
-            const profilesSnapshot = await getDocs(collection(db, "seller_profiles"));
-            const profilesMap = {};
-            profilesSnapshot.docs.forEach((doc) => {
-                const data = doc.data();
-                profilesMap[doc.id] = {
-                    id: doc.id,
-                    username: data.profileInfo?.username || "N/A",
-                    email: data.auth?.email || "N/A",
-                    phone: data.auth?.phone || "N/A",
-                    city: data.profileInfo?.city || data.address?.city || "N/A",
-                    referrerId: data.referral?.referrerId || null,
-                    referredByCode: data.referral?.referredByCode || null,
-                };
+            // Fetch referral data from API
+            const API_URL = `${BASE_URL}/api/adminreferal/get`;
+            const response = await fetch(API_URL, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
             });
 
-            // Fetch all points transactions
-            const transactionsSnapshot = await getDocs(
-                query(collection(db, "points_transactions"), orderBy("createdAt", "desc"))
-            );
+            const apiData = await response.json();
 
-            // Create a map of transactions by userId
-            const transactionsMap = {};
-            transactionsSnapshot.docs.forEach((doc) => {
-                const data = doc.data();
-                const userId = data.userId;
-                if (!transactionsMap[userId]) {
-                    transactionsMap[userId] = [];
-                }
-                transactionsMap[userId].push({
-                    id: doc.id,
-                    ...data,
-                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt,
-                    expiryAt: data.expiryAt?.toDate ? data.expiryAt.toDate() : data.expiryAt,
-                });
-            });
+            if (apiData.success && Array.isArray(apiData.data)) {
+                // Merge API data with Firebase profile data
+                const combinedData = apiData.data.map((item) => {
+                    const userId = item.userId;
+                    const profile = profilesMap[userId] || {};
 
-            // Count referrals for each user (users who were referred by this user)
-            const referralCountMap = {};
-            Object.values(profilesMap).forEach((profile) => {
-                if (profile.referrerId) {
-                    if (!referralCountMap[profile.referrerId]) {
-                        referralCountMap[profile.referrerId] = 0;
-                    }
-                    referralCountMap[profile.referrerId]++;
-                }
-            });
+                    // Convert transaction timestamps
+                    const transactions = (item.transactions || []).map((txn) => ({
+                        ...txn,
+                        createdAt: convertTimestamp(txn.createdAt),
+                        expiryAt: convertTimestamp(txn.expiryAt),
+                    }));
 
-            // Combine all data
-            const combinedData = referralsSnapshot.docs.map((doc) => {
-                const referralData = doc.data();
-                const userId = referralData.userId;
-                const profile = profilesMap[userId] || {};
-                const transactions = transactionsMap[userId] || [];
-                const referralCount = referralCountMap[userId] || 0;
-
-                // Get referrer info if exists
-                let referrerInfo = null;
-                if (profile.referrerId && profilesMap[profile.referrerId]) {
-                    referrerInfo = {
-                        username: profilesMap[profile.referrerId].username,
-                        email: profilesMap[profile.referrerId].email,
+                    return {
+                        id: userId,
+                        userId: userId,
+                        referralCode: item.referralCode || "N/A",
+                        totalEarned: item.totalEarned || 0,
+                        totalRedeemed: item.totalRedeemed || 0,
+                        availablePoints: item.availablePoints || 0,
+                        signupRewardGiven: item.signupRewardGiven || false,
+                        referralCount: item.referralCount || 0,
+                        referredBy: item.referredBy || null,
+                        createdAt: convertTimestamp(item.createdAt),
+                        // Use Firebase profile data if API has "Unknown" or "N/A"
+                        username: item.username === "Unknown" || !item.username 
+                            ? (profile.username || "Unknown User")
+                            : item.username,
+                        email: item.email === "N/A" || !item.email
+                            ? (profile.email || "N/A")
+                            : item.email,
+                        phone: item.phone === "N/A" || !item.phone
+                            ? (profile.phone || "N/A")
+                            : item.phone,
+                        city: item.city === "N/A" || !item.city
+                            ? (profile.city || "N/A")
+                            : item.city,
+                        // Transactions
+                        transactions: transactions,
                     };
-                }
+                });
 
-                return {
-                    id: doc.id,
-                    userId: userId,
-                    referralCode: referralData.referralCode || "N/A",
-                    totalEarned: referralData.totalEarned || 0,
-                    totalRedeemed: referralData.totalRedeemed || 0,
-                    availablePoints: referralData.availablePoints || 0,
-                    signupRewardGiven: referralData.signupRewardGiven || false,
-                    createdAt: referralData.createdAt?.toDate ? referralData.createdAt.toDate() : referralData.createdAt,
-                    // User profile info
-                    username: profile.username,
-                    email: profile.email,
-                    phone: profile.phone,
-                    city: profile.city,
-                    // Referral info
-                    referralCount: referralCount,
-                    referrerInfo: referrerInfo,
-                    referredByCode: profile.referredByCode,
-                    // Transactions
-                    transactions: transactions,
-                };
-            });
-
-            setReferralData(combinedData);
+                setReferralData(combinedData);
+            } else {
+                setReferralData([]);
+            }
         } catch (error) {
             console.error("Error fetching referral data:", error);
+            setReferralData([]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Fetch single user details
+    const fetchUserDetails = async (userId) => {
+        try {
+            setLoadingDetails(true);
+            const API_URL = `${BASE_URL}/api/adminreferal/get/${userId}`;
+            
+            const response = await fetch(API_URL, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            const apiData = await response.json();
+
+            if (apiData.success && apiData.data) {
+                const item = apiData.data;
+                const profile = userProfiles[userId] || {};
+
+                // Convert transaction timestamps
+                const transactions = (item.transactions || []).map((txn) => ({
+                    ...txn,
+                    createdAt: convertTimestamp(txn.createdAt),
+                    expiryAt: convertTimestamp(txn.expiryAt),
+                }));
+
+                const userDetails = {
+                    ...item,
+                    createdAt: convertTimestamp(item.createdAt),
+                    username: item.username === "Unknown" || !item.username 
+                        ? (profile.username || "Unknown User")
+                        : item.username,
+                    email: item.email === "N/A" || !item.email
+                        ? (profile.email || "N/A")
+                        : item.email,
+                    phone: item.phone === "N/A" || !item.phone
+                        ? (profile.phone || "N/A")
+                        : item.phone,
+                    city: item.city === "N/A" || !item.city
+                        ? (profile.city || "N/A")
+                        : item.city,
+                    transactions: transactions,
+                };
+
+                setSelectedUserDetails(userDetails);
+            } else {
+                setSelectedUserDetails(null);
+            }
+        } catch (error) {
+            console.error("Error fetching user details:", error);
+            setSelectedUserDetails(null);
+        } finally {
+            setLoadingDetails(false);
         }
     };
 
@@ -133,17 +196,31 @@ const Referrals = () => {
         fetchReferralData();
     }, []);
 
+    // Fetch user details when selected user changes
+    useEffect(() => {
+        if (selectedUser) {
+            fetchUserDetails(selectedUser.userId);
+        }
+    }, [selectedUser, userProfiles]);
+
     const filteredData = useMemo(() => {
         return referralData
             .filter((item) => {
                 const searchLower = search.toLowerCase();
+
+                const username = (item.username ?? "").toLowerCase();
+                const email = (item.email ?? "").toLowerCase();
+                const phone = (item.phone ?? "").toLowerCase();
+                const referralCode = (item.referralCode ?? "").toLowerCase();
+
                 return (
-                    item.username.toLowerCase().includes(searchLower) ||
-                    item.email.toLowerCase().includes(searchLower) ||
-                    item.referralCode.toLowerCase().includes(searchLower) ||
-                    item.phone.toLowerCase().includes(searchLower)
+                    username.includes(searchLower) ||
+                    email.includes(searchLower) ||
+                    phone.includes(searchLower) ||
+                    referralCode.includes(searchLower)
                 );
             })
+
             .sort((a, b) => {
                 if (sort === "Latest") {
                     return new Date(b.createdAt) - new Date(a.createdAt);
@@ -155,11 +232,25 @@ const Referrals = () => {
 
     const formatDate = (date) => {
         if (!date) return "N/A";
-        const d = new Date(date);
+        const d = date instanceof Date ? date : new Date(date);
+        if (isNaN(d.getTime())) return "N/A";
         return d.toLocaleDateString("en-US", {
             year: "numeric",
             month: "short",
             day: "numeric",
+        });
+    };
+
+    const formatDateTime = (date) => {
+        if (!date) return "N/A";
+        const d = date instanceof Date ? date : new Date(date);
+        if (isNaN(d.getTime())) return "N/A";
+        return d.toLocaleString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
         });
     };
 
@@ -262,7 +353,7 @@ const Referrals = () => {
                                             <div className="flex items-center gap-3">
                                                 <button
                                                     onClick={() => setSelectedUser(item)}
-                                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs sm:text-sm transition-colors hover:bg-blue-700"
+                                                    className="px-3 py-1.5 bg-[#081F5C] text-white rounded-lg text-xs sm:text-sm transition-colors hover:bg-[#081F5C]"
                                                 >
                                                     View Details
                                                 </button>
@@ -306,7 +397,7 @@ const Referrals = () => {
                                             </div>
                                             <div>
                                                 <p className="text-xs text-gray-500 mb-1">Available Points</p>
-                                                <p className="font-semibold text-blue-600">
+                                                <p className="font-semibold text-[#081F5C]">
                                                     {item.availablePoints} pts
                                                 </p>
                                             </div>
@@ -361,7 +452,7 @@ const Referrals = () => {
                                                                         className="border-b hover:bg-gray-50 transition"
                                                                     >
                                                                         <td className="p-3 text-gray-600">
-                                                                            {formatDate(txn.createdAt)}
+                                                                            {formatDateTime(txn.createdAt)}
                                                                         </td>
                                                                         <td className="p-3 text-gray-700">
                                                                             {txn.title || "N/A"}
@@ -371,32 +462,29 @@ const Referrals = () => {
                                                                         </td>
                                                                         <td className="p-3">
                                                                             <span
-                                                                                className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                                                                    txn.type === "credit"
+                                                                                className={`px-2 py-1 rounded-full text-xs font-semibold ${txn.type === "credit"
                                                                                         ? "bg-green-100 text-green-700"
                                                                                         : "bg-red-100 text-red-700"
-                                                                                }`}
+                                                                                    }`}
                                                                             >
                                                                                 {txn.type || "N/A"}
                                                                             </span>
                                                                         </td>
                                                                         <td
-                                                                            className={`p-3 font-semibold ${
-                                                                                txn.type === "credit"
+                                                                            className={`p-3 font-semibold ${txn.type === "credit"
                                                                                     ? "text-green-600"
                                                                                     : "text-red-600"
-                                                                            }`}
+                                                                                }`}
                                                                         >
                                                                             {txn.type === "credit" ? "+" : "-"}
                                                                             {txn.points || 0}
                                                                         </td>
                                                                         <td className="p-3">
                                                                             <span
-                                                                                className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                                                                    txn.expired
+                                                                                className={`px-2 py-1 rounded-full text-xs font-semibold ${txn.expired
                                                                                         ? "bg-red-100 text-red-700"
                                                                                         : "bg-green-100 text-green-700"
-                                                                                }`}
+                                                                                    }`}
                                                                             >
                                                                                 {txn.expired ? "Expired" : "Active"}
                                                                             </span>
@@ -420,7 +508,10 @@ const Referrals = () => {
                         <div className="fixed inset-0 bg-black/50 flex justify-center items-center p-4 z-50">
                             <div className="bg-white w-full max-w-2xl rounded-xl p-6 relative max-h-[90vh] overflow-y-auto">
                                 <button
-                                    onClick={() => setSelectedUser(null)}
+                                    onClick={() => {
+                                        setSelectedUser(null);
+                                        setSelectedUserDetails(null);
+                                    }}
                                     className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
                                 >
                                     <X size={20} />
@@ -428,182 +519,182 @@ const Referrals = () => {
 
                                 <h2 className="text-xl font-semibold mb-4">Referral Details</h2>
 
-                                <div className="space-y-4">
-                                    <div>
-                                        <h3 className="font-semibold text-gray-700 mb-2">User Information</h3>
-                                        <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
-                                            <p>
-                                                <strong>Name:</strong> {selectedUser.username}
-                                            </p>
-                                            <p>
-                                                <strong>Email:</strong> {selectedUser.email}
-                                            </p>
-                                            <p>
-                                                <strong>Phone:</strong> {selectedUser.phone}
-                                            </p>
-                                            <p>
-                                                <strong>City:</strong> {selectedUser.city}
-                                            </p>
-                                        </div>
+                                {loadingDetails ? (
+                                    <div className="flex justify-center items-center py-12">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                        <span className="ml-3 text-gray-600">Loading details...</span>
                                     </div>
-
-                                    <div>
-                                        <h3 className="font-semibold text-gray-700 mb-2">Referral Statistics</h3>
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <div className="bg-green-50 p-4 rounded-lg">
-                                                <p className="text-xs text-gray-500 mb-1">Total Earned</p>
-                                                <p className="text-xl font-bold text-green-600">
-                                                    {selectedUser.totalEarned} pts
-                                                </p>
-                                            </div>
-                                            <div className="bg-orange-50 p-4 rounded-lg">
-                                                <p className="text-xs text-gray-500 mb-1">Total Redeemed</p>
-                                                <p className="text-xl font-bold text-orange-600">
-                                                    {selectedUser.totalRedeemed} pts
-                                                </p>
-                                            </div>
-                                            <div className="bg-blue-50 p-4 rounded-lg">
-                                                <p className="text-xs text-gray-500 mb-1">Available Points</p>
-                                                <p className="text-xl font-bold text-blue-600">
-                                                    {selectedUser.availablePoints} pts
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <h3 className="font-semibold text-gray-700 mb-2">Referral Code</h3>
-                                        <div className="bg-gray-50 p-4 rounded-lg">
-                                            <p className="font-mono text-lg font-semibold">
-                                                {selectedUser.referralCode}
-                                            </p>
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                Created: {formatDate(selectedUser.createdAt)}
-                                            </p>
-                                            <p className="text-xs text-gray-500">
-                                                Signup Reward:{" "}
-                                                {selectedUser.signupRewardGiven ? "Given ✓" : "Not Given"}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {selectedUser.referrerInfo && (
+                                ) : selectedUserDetails ? (
+                                    <div className="space-y-4">
                                         <div>
-                                            <h3 className="font-semibold text-gray-700 mb-2">Referred By</h3>
-                                            <div className="bg-gray-50 p-4 rounded-lg">
+                                            <h3 className="font-semibold text-gray-700 mb-2">User Information</h3>
+                                            <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
                                                 <p>
-                                                    <strong>Name:</strong> {selectedUser.referrerInfo.username}
+                                                    <strong>Name:</strong> {selectedUserDetails.username}
                                                 </p>
                                                 <p>
-                                                    <strong>Email:</strong> {selectedUser.referrerInfo.email}
+                                                    <strong>Email:</strong> {selectedUserDetails.email}
                                                 </p>
-                                                {selectedUser.referredByCode && (
-                                                    <p>
-                                                        <strong>Code Used:</strong> {selectedUser.referredByCode}
-                                                    </p>
-                                                )}
+                                                <p>
+                                                    <strong>Phone:</strong> {selectedUserDetails.phone}
+                                                </p>
+                                                <p>
+                                                    <strong>City:</strong> {selectedUserDetails.city}
+                                                </p>
                                             </div>
                                         </div>
-                                    )}
 
-                                    <div>
-                                        <h3 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                                            <Users size={16} />
-                                            Referrals Made ({selectedUser.referralCount})
-                                        </h3>
-                                        {selectedUser.referralCount > 0 ? (
+                                        <div>
+                                            <h3 className="font-semibold text-gray-700 mb-2">Referral Statistics</h3>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <div className="bg-green-50 p-4 rounded-lg">
+                                                    <p className="text-xs text-gray-500 mb-1">Total Earned</p>
+                                                    <p className="text-xl font-bold text-green-600">
+                                                        {selectedUserDetails.totalEarned} pts
+                                                    </p>
+                                                </div>
+                                                <div className="bg-orange-50 p-4 rounded-lg">
+                                                    <p className="text-xs text-gray-500 mb-1">Total Redeemed</p>
+                                                    <p className="text-xl font-bold text-orange-600">
+                                                        {selectedUserDetails.totalRedeemed} pts
+                                                    </p>
+                                                </div>
+                                                <div className="bg-blue-50 p-4 rounded-lg">
+                                                    <p className="text-xs text-gray-500 mb-1">Available Points</p>
+                                                    <p className="text-xl font-bold text-blue-600">
+                                                        {selectedUserDetails.availablePoints} pts
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <h3 className="font-semibold text-gray-700 mb-2">Referral Code</h3>
                                             <div className="bg-gray-50 p-4 rounded-lg">
-                                                <p className="text-sm">
-                                                    This user has referred{" "}
-                                                    <strong>{selectedUser.referralCount}</strong> user
-                                                    {selectedUser.referralCount !== 1 ? "s" : ""}.
+                                                <p className="font-mono text-lg font-semibold">
+                                                    {selectedUserDetails.referralCode}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    Created: {formatDate(selectedUserDetails.createdAt)}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    Signup Reward:{" "}
+                                                    {selectedUserDetails.signupRewardGiven ? "Given ✓" : "Not Given"}
                                                 </p>
                                             </div>
-                                        ) : (
-                                            <div className="bg-gray-50 p-4 rounded-lg">
-                                                <p className="text-sm text-gray-500">
-                                                    This user hasn't referred anyone yet.
-                                                </p>
+                                        </div>
+
+                                        {selectedUserDetails.referredBy && (
+                                            <div>
+                                                <h3 className="font-semibold text-gray-700 mb-2">Referred By</h3>
+                                                <div className="bg-gray-50 p-4 rounded-lg">
+                                                    <p className="text-sm text-gray-600">
+                                                        User ID: {selectedUserDetails.referredBy}
+                                                    </p>
+                                                </div>
                                             </div>
                                         )}
-                                    </div>
 
-                                    <div>
-                                        <h3 className="font-semibold text-gray-700 mb-2">
-                                            All Transactions ({selectedUser.transactions.length})
-                                        </h3>
-                                        {selectedUser.transactions.length > 0 ? (
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-sm border-collapse">
-                                                    <thead>
-                                                        <tr className="bg-gray-100 text-gray-700">
-                                                            <th className="p-2 text-left">Date</th>
-                                                            <th className="p-2 text-left">Title</th>
-                                                            <th className="p-2 text-left">Category</th>
-                                                            <th className="p-2 text-left">Type</th>
-                                                            <th className="p-2 text-left">Points</th>
-                                                            <th className="p-2 text-left">Status</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {selectedUser.transactions.map((txn, i) => (
-                                                            <tr
-                                                                key={i}
-                                                                className="border-b hover:bg-gray-50 transition"
-                                                            >
-                                                                <td className="p-2 text-gray-600">
-                                                                    {formatDate(txn.createdAt)}
-                                                                </td>
-                                                                <td className="p-2 text-gray-700">
-                                                                    {txn.title || "N/A"}
-                                                                </td>
-                                                                <td className="p-2 text-gray-700">
-                                                                    {txn.category || "N/A"}
-                                                                </td>
-                                                                <td className="p-2">
-                                                                    <span
-                                                                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                                                            txn.type === "credit"
-                                                                                ? "bg-green-100 text-green-700"
-                                                                                : "bg-red-100 text-red-700"
-                                                                        }`}
-                                                                    >
-                                                                        {txn.type || "N/A"}
-                                                                    </span>
-                                                                </td>
-                                                                <td
-                                                                    className={`p-2 font-semibold ${
-                                                                        txn.type === "credit"
-                                                                            ? "text-green-600"
-                                                                            : "text-red-600"
-                                                                    }`}
-                                                                >
-                                                                    {txn.type === "credit" ? "+" : "-"}
-                                                                    {txn.points || 0}
-                                                                </td>
-                                                                <td className="p-2">
-                                                                    <span
-                                                                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                                                            txn.expired
-                                                                                ? "bg-red-100 text-red-700"
-                                                                                : "bg-green-100 text-green-700"
-                                                                        }`}
-                                                                    >
-                                                                        {txn.expired ? "Expired" : "Active"}
-                                                                    </span>
-                                                                </td>
+                                        <div>
+                                            <h3 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                                <Users size={16} />
+                                                Referrals Made ({selectedUserDetails.referralCount || 0})
+                                            </h3>
+                                            {(selectedUserDetails.referralCount || 0) > 0 ? (
+                                                <div className="bg-gray-50 p-4 rounded-lg">
+                                                    <p className="text-sm">
+                                                        This user has referred{" "}
+                                                        <strong>{selectedUserDetails.referralCount}</strong> user
+                                                        {selectedUserDetails.referralCount !== 1 ? "s" : ""}.
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-gray-50 p-4 rounded-lg">
+                                                    <p className="text-sm text-gray-500">
+                                                        This user hasn't referred anyone yet.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <h3 className="font-semibold text-gray-700 mb-2">
+                                                All Transactions ({selectedUserDetails.transactions?.length || 0})
+                                            </h3>
+                                            {selectedUserDetails.transactions && selectedUserDetails.transactions.length > 0 ? (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-sm border-collapse">
+                                                        <thead>
+                                                            <tr className="bg-gray-100 text-gray-700">
+                                                                <th className="p-2 text-left">Date</th>
+                                                                <th className="p-2 text-left">Title</th>
+                                                                <th className="p-2 text-left">Category</th>
+                                                                <th className="p-2 text-left">Type</th>
+                                                                <th className="p-2 text-left">Points</th>
+                                                                <th className="p-2 text-left">Status</th>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        ) : (
-                                            <div className="bg-gray-50 p-4 rounded-lg">
-                                                <p className="text-sm text-gray-500">No transactions found.</p>
-                                            </div>
-                                        )}
+                                                        </thead>
+                                                        <tbody>
+                                                            {selectedUserDetails.transactions.map((txn, i) => (
+                                                                <tr
+                                                                    key={i}
+                                                                    className="border-b hover:bg-gray-50 transition"
+                                                                >
+                                                                    <td className="p-2 text-gray-600">
+                                                                        {formatDateTime(txn.createdAt)}
+                                                                    </td>
+                                                                    <td className="p-2 text-gray-700">
+                                                                        {txn.title || "N/A"}
+                                                                    </td>
+                                                                    <td className="p-2 text-gray-700">
+                                                                        {txn.category || "N/A"}
+                                                                    </td>
+                                                                    <td className="p-2">
+                                                                        <span
+                                                                            className={`px-2 py-1 rounded-full text-xs font-semibold ${txn.type === "credit"
+                                                                                    ? "bg-green-100 text-green-700"
+                                                                                    : "bg-red-100 text-red-700"
+                                                                                }`}
+                                                                        >
+                                                                            {txn.type || "N/A"}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td
+                                                                        className={`p-2 font-semibold ${txn.type === "credit"
+                                                                                ? "text-green-600"
+                                                                                : "text-red-600"
+                                                                            }`}
+                                                                    >
+                                                                        {txn.type === "credit" ? "+" : "-"}
+                                                                        {txn.points || 0}
+                                                                    </td>
+                                                                    <td className="p-2">
+                                                                        <span
+                                                                            className={`px-2 py-1 rounded-full text-xs font-semibold ${txn.expired
+                                                                                    ? "bg-red-100 text-red-700"
+                                                                                    : "bg-green-100 text-green-700"
+                                                                                }`}
+                                                                        >
+                                                                            {txn.expired ? "Expired" : "Active"}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-gray-50 p-4 rounded-lg">
+                                                    <p className="text-sm text-gray-500">No transactions found.</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="text-center py-8 text-gray-500">
+                                        Failed to load user details.
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

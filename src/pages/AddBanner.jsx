@@ -5,8 +5,8 @@ import {
   RefreshCw,
   Image as ImageIcon,
   Trash2,
-  Link,
   X,
+  Video,
 } from "lucide-react";
 
 import {
@@ -36,12 +36,14 @@ const AddBanner = () => {
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
   const [bannerName, setBannerName] = useState("");
-  const [image, setImage] = useState(null);
+  const [file, setFile] = useState(null);
+  const [bannerType, setBannerType] = useState("image"); // image | video
   const [banners, setBanners] = useState([]);
 
-  const [loading, setLoading] = useState(false);       
-  const [refreshing, setRefreshing] = useState(false); 
-  const [initialLoading, setInitialLoading] = useState(true); 
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+
   const [popup, setPopup] = useState({
     open: false,
     type: "success",
@@ -50,10 +52,11 @@ const AddBanner = () => {
 
   const showPopup = (type, message) => {
     setPopup({ open: true, type, message });
-    setTimeout(() => {
-      setPopup({ open: false, type, message: "" });
-    }, 3000);
+    setTimeout(() => setPopup({ open: false, type, message: "" }), 3000);
   };
+
+  /* ================= FETCH ================= */
+
   const fetchBanners = async () => {
     try {
       setRefreshing(true);
@@ -70,31 +73,36 @@ const AddBanner = () => {
   useEffect(() => {
     fetchBanners();
   }, []);
+
+  /* ================= UPLOAD ================= */
+
   const uploadBanner = async () => {
-    if (!image || !bannerName) {
-      showPopup("error", "Banner name and image are required");
+    if (!file || !bannerName) {
+      showPopup("error", "Banner name and file are required");
       return;
     }
 
     try {
       setLoading(true);
 
-      const imageRef = ref(
+      const fileRef = ref(
         storage,
-        `dashboard-banners/${Date.now()}-${image.name}`
+        `dashboard-banners/${bannerType}/${Date.now()}-${file.name}`
       );
 
-      await uploadBytes(imageRef, image);
-      const imageUrl = await getDownloadURL(imageRef);
+      await uploadBytes(fileRef, file);
+      const fileUrl = await getDownloadURL(fileRef);
 
       await addDoc(collection(db, "dashboard_banners"), {
         name: bannerName,
-        imageUrl,
+        fileUrl,
+        fileType: bannerType, // image | video
         createdAt: serverTimestamp(),
       });
 
       setBannerName("");
-      setImage(null);
+      setFile(null);
+      setBannerType("image");
       showPopup("success", "Banner uploaded successfully");
       fetchBanners();
     } catch {
@@ -115,67 +123,102 @@ const AddBanner = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] flex">
+    <div className="min-h-screen bg-gray-50 flex">
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
 
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/30 z-40 lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-black/30 z-40 lg:hidden"
           onClick={toggleSidebar}
         />
       )}
 
       <div
-        className={`flex-1 flex flex-col transition-all duration-300 ${
-          sidebarOpen ? "lg:ml-60" : "ml-0"
-        }`}
+        className={`flex-1 flex flex-col transition-all duration-300 ${sidebarOpen ? "lg:ml-60" : "ml-0"
+          }`}
       >
         <TopBar toggleSidebar={toggleSidebar} />
 
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <main className="flex-1 p-6 overflow-auto">
+          {/* HEADER */}
+          <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-2xl font-semibold text-primaryDarkBlue">
+              <h1 className="text-2xl font-bold text-gray-800">
                 Dashboard Banners
               </h1>
               <p className="text-gray-500 text-sm mt-1">
-                Upload, manage and control dashboard banners
+                Upload image or video banners
               </p>
             </div>
 
             <button
               onClick={fetchBanners}
               disabled={refreshing}
-              className="flex items-center gap-2 bg-primaryDarkBlue text-white px-5 py-2 rounded-xl shadow
-                         hover:scale-[1.03] transition disabled:opacity-70"
+              className="flex items-center gap-2 bg-red-600 text-white px-5 py-2 rounded-xl hover:bg-red-700"
             >
               <RefreshCw
                 size={16}
                 className={refreshing ? "animate-spin" : ""}
               />
-              {refreshing ? "Refreshing..." : "Refresh"}
+              Refresh
             </button>
           </div>
 
-          <div className="bg-white border-l-4 border-primaryDarkBlue rounded-xl p-5 mb-8 shadow-sm">
-            <h3 className="font-semibold text-primaryDarkBlue mb-2">
-              Banner Upload Guidelines
-            </h3>
-            <ul className="grid sm:grid-cols-2 gap-2 text-sm text-gray-600 list-disc ml-5">
-              <li>Recommended size: <b>1200 × 400 px</b></li>
-              <li>Aspect ratio: <b>3 : 1</b></li>
-              <li>Maximum size: <b>10 MB</b></li>
-              <li>Formats: JPG, PNG, WEBP</li>
-            </ul>
+          {/* UPLOAD TYPE */}
+          <div className="flex gap-4 mb-4 max-w-xl">
+            <button
+              onClick={() => setBannerType("image")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border font-medium transition
+                ${bannerType === "image"
+                  ? "bg-red-600 text-white border-red-600"
+                  : "bg-white text-gray-700 hover:bg-red-50"
+                }`}
+            >
+              <ImageIcon size={18} />
+              Image Banner
+            </button>
+
+            <button
+              onClick={() => setBannerType("video")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border font-medium transition
+                ${bannerType === "video"
+                  ? "bg-red-600 text-white border-red-600"
+                  : "bg-white text-gray-700 hover:bg-red-50"
+                }`}
+            >
+              <Video size={18} />
+              Video Banner
+            </button>
           </div>
 
+          {/* UPLOAD FORM */}
           <div className="bg-white rounded-2xl border shadow-sm p-5 flex flex-col lg:flex-row gap-4 items-center mb-10">
             <input
               type="file"
-              accept="image/*"
-              onChange={(e) => setImage(e.target.files[0])}
-              className="border rounded-xl p-3 w-full lg:w-1/3"
+              accept={
+                bannerType === "image"
+                  ? "image/*"
+                  : "video/mp4,video/webm"
+              }
+              onChange={(e) => setFile(e.target.files[0])}
+              className="
+    w-full lg:w-1/3
+    border-2 border-dashed border-gray-300
+    rounded-xl p-4
+    text-sm text-gray-600
+    bg-white
+    cursor-pointer
+    file:mr-4 file:py-2 file:px-4
+    file:rounded-lg file:border-0
+    file:bg-red-600 file:text-white
+    file:font-medium
+    hover:border-red-400
+    hover:file:bg-red-700
+    focus:outline-none focus:ring-2 focus:ring-red-500
+    transition
+  "
             />
+
 
             <input
               type="text"
@@ -188,13 +231,13 @@ const AddBanner = () => {
             <button
               onClick={uploadBanner}
               disabled={loading}
-              className="bg-primaryDarkBlue text-white px-7 py-3 rounded-xl hover:scale-[1.04]
-                         transition disabled:opacity-50 shadow-lg"
+              className="bg-red-600 hover:bg-red-700 text-white px-7 py-3 rounded-xl disabled:opacity-50"
             >
               {loading ? "Uploading..." : "Upload Banner"}
             </button>
           </div>
 
+          {/* LIST */}
           {initialLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-7">
               {[...Array(6)].map((_, i) => (
@@ -206,23 +249,27 @@ const AddBanner = () => {
               {banners.map((banner) => (
                 <div
                   key={banner.id}
-                  className="group bg-white rounded-2xl border shadow-sm overflow-hidden
-                             hover:-translate-y-1 hover:shadow-xl transition-all"
+                  className="group bg-white rounded-2xl border shadow-sm overflow-hidden hover:-translate-y-1 hover:shadow-xl transition"
                 >
                   <div className="relative">
-                    <img
-                      src={banner.imageUrl}
-                      alt={banner.name}
-                      className="h-52 w-full object-cover"
-                    />
+                    {banner.fileType === "video" ? (
+                      <video
+                        src={banner.fileUrl}
+                        controls
+                        className="h-52 w-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={banner.fileUrl}
+                        alt={banner.name}
+                        className="h-52 w-full object-cover"
+                      />
+                    )}
 
-                    <div className="absolute inset-0 bg-black/40 opacity-0
-                                    group-hover:opacity-100 transition
-                                    flex items-center justify-center gap-3">
-                    
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                       <button
                         onClick={() => deleteBanner(banner.id)}
-                        className="bg-white p-2 rounded-full hover:scale-110"
+                        className="bg-white p-2 rounded-full"
                       >
                         <Trash2 size={16} className="text-red-600" />
                       </button>
@@ -230,11 +277,13 @@ const AddBanner = () => {
                   </div>
 
                   <div className="p-4">
-                    <p className="font-semibold text-primaryDarkBlue truncate">
+                    <p className="font-semibold text-gray-800 truncate">
                       {banner.name}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      ID: {banner.id}
+                      {banner.fileType === "video"
+                        ? "Video Banner"
+                        : "Image Banner"}
                     </p>
                   </div>
                 </div>
@@ -245,27 +294,22 @@ const AddBanner = () => {
               <ImageIcon size={52} className="mx-auto mb-4" />
               <p className="text-lg font-medium">No banners uploaded</p>
               <p className="text-sm mt-1">
-                Upload your first dashboard banner
+                Upload your first image or video banner
               </p>
             </div>
           )}
         </main>
       </div>
 
+      {/* POPUP */}
       {popup.open && (
-        <div className="fixed bottom-6 right-6 z-50 animate-slide-up">
+        <div className="fixed bottom-6 right-6 z-50">
           <div
-            className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-xl text-white ${
-              popup.type === "success"
-                ? "bg-primaryDarkBlue"
-                : "bg-red-600"
-            }`}
+            className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-xl text-white ${popup.type === "success" ? "bg-red-600" : "bg-gray-800"
+              }`}
           >
-            <span className="text-sm font-medium">{popup.message}</span>
-            <button
-              onClick={() => setPopup({ ...popup, open: false })}
-              className="text-white/80 hover:text-white"
-            >
+            <span className="text-sm">{popup.message}</span>
+            <button onClick={() => setPopup({ ...popup, open: false })}>
               <X size={16} />
             </button>
           </div>
