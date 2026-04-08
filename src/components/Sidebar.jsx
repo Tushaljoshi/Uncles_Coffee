@@ -8,6 +8,8 @@ import {
   UserCircle2Icon,
   BugIcon,
   HelpCircleIcon,
+  ScanEyeIcon
+
 } from "lucide-react";
 
 
@@ -27,15 +29,17 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       section: "Management",
       items: [
         { label: "Add Media", icon: ImageIcon, path: "/add-banner" },
+        { label: "Add Review", icon: ScanEyeIcon, path: "/add-review" },
         { label: "Create Services", icon: CarFrontIcon, path: "/service" },
         { label: "Create Plan", icon: CoinsIcon, path: "/plan" },
         { label: "Mechanica Services", icon: PackageOpenIcon, path: "/mechanicaservices" },
+        { label: "Customer Bookings", icon: PackageOpenIcon, path: "/customer-booking" },
       ],
     },
     {
       section: "Support",
       items: [{ label: "Support Tickets", icon: HelpCircleIcon, path: "/help" },
-        { label: "Disputes", icon: BugIcon, path: "/dispute" },
+      { label: "Disputes", icon: BugIcon, path: "/dispute" },
       ],
 
     },
@@ -57,10 +61,12 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b">
         <div className="flex items-center gap-2">
           <div className="hidden sm:block">
-            <h1 className="text-md font-bold text-gray-800">
-              Book<span className="text-red-600">My</span>Mechanik
+            <h1 className="text-md font-bold  text-black tracking-wide">
+              BOOK MY MECHANiK<span className="align-top text-md ml-0">™</span>
             </h1>
-            <p className="text-[10px] text-gray-500 -mt-1">Admin Panel</p>
+            <p className="text-[10px] text-gray-500 -mt-1">
+              Admin Panel
+            </p>
           </div>
         </div>
         <button
@@ -89,10 +95,9 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                     onClick={() => handleNavigation(item.path)}
                     className={`flex items-center gap-3 w-full px-2 sm:px-3 py-2
                       rounded-md text-xs sm:text-sm transition-all
-                      ${
-                        active
-                          ? "bg-red-600 text-white font-medium shadow-sm"
-                          : "text-gray-700 hover:bg-red-50 hover:text-red-600"
+                      ${active
+                        ? "bg-red-600 text-white font-medium shadow-sm"
+                        : "text-gray-700 hover:bg-red-50 hover:text-red-600"
                       }`}
                   >
                     <item.icon size={16} />

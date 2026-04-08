@@ -25,7 +25,7 @@ const SubscriptionPlans = () => {
 
   const [plans, setPlans] = useState([]);
 
-  const API_BASE = "https://bmm-backend.onrender.com/api/plans";
+  const API_BASE = `${import.meta.env.VITE_API_BASE_URL}/api/plans`;
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -38,9 +38,18 @@ const SubscriptionPlans = () => {
     try {
       setLoading(true);
       setError("");
-      const response = await fetch(API_BASE);
-      const data = await response.json();
 
+      const response = await fetch(API_BASE);
+      const text = await response.text();
+
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        console.error("Invalid JSON:", text);
+        throw new Error("Server is not returning JSON");
+      }
       if (data.success) {
         setPlans(data.data);
       } else {
@@ -55,7 +64,6 @@ const SubscriptionPlans = () => {
   };
 
   /* ================= CREATE PLAN ================= */
-
   const handleCreatePlan = async () => {
     if (!planName || !planPrice) {
       setError("Please fill in all fields");
@@ -65,6 +73,7 @@ const SubscriptionPlans = () => {
     try {
       setCreating(true);
       setError("");
+
       const response = await fetch(API_BASE, {
         method: "POST",
         headers: {
@@ -94,14 +103,40 @@ const SubscriptionPlans = () => {
     }
   };
 
-  /* ================= DELETE PLAN ================= */
+  /* ================= UPDATE PLAN ================= */
+  const handleUpdatePlan = async (planId, updatedData) => {
+    try {
+      setError("");
 
+      const response = await fetch(`${API_BASE}/${planId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await fetchPlans();
+      } else {
+        setError("Failed to update plan");
+      }
+    } catch (err) {
+      setError("Error updating plan: " + err.message);
+      console.error(err);
+    }
+  };
+
+  /* ================= DELETE PLAN ================= */
   const handleDeletePlan = async (planId) => {
     if (!window.confirm("Are you sure you want to delete this plan?")) return;
 
     try {
       setDeleting(planId);
       setError("");
+
       const response = await fetch(`${API_BASE}/${planId}`, {
         method: "DELETE",
       });
@@ -143,7 +178,10 @@ const SubscriptionPlans = () => {
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex justify-between items-center">
               <span>{error}</span>
-              <button onClick={() => setError("")} className="text-red-500 hover:text-red-700">
+              <button
+                onClick={() => setError("")}
+                className="text-red-500 hover:text-red-700"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -165,7 +203,7 @@ const SubscriptionPlans = () => {
             </button>
           </div>
 
-          {/* PLANS LIST / SKELETON */}
+          {/* TABLE */}
           {loading ? (
             <div className="bg-white rounded-lg border overflow-hidden">
               {[...Array(5)].map((_, i) => (
@@ -185,33 +223,23 @@ const SubscriptionPlans = () => {
                 </thead>
                 <tbody className="divide-y">
                   {plans.map((plan) => (
-                    <tr key={plan.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-800">
-                        {plan.planName}
+                    <tr key={plan.planId} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">{plan.planName}</td>
+
+                      <td className="px-6 py-4">
+                        ₹ {plan.pricePerDay} / day
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-red-50 text-red-600 font-semibold">
-                          ₹ {plan.pricePerDay}
-                          <span className="text-xs font-medium text-red-500">/ day</span>
-                        </span>
+
+                      <td className="px-6 py-4">
+                        {new Date(plan.createdAt).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {new Date(plan.createdAt).toLocaleDateString("en-IN", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
+
+                      <td className="px-6 py-4">
                         <button
-                          onClick={() => handleDeletePlan(plan.id)}
-                          disabled={deleting === plan.id}
-                          className="text-red-600 hover:bg-red-50 p-2 rounded inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium hover:text-red-700"
-                          title="Delete plan"
+                          onClick={() => handleDeletePlan(plan.planId)}
+                          disabled={deleting === plan.planId}
+                          className="text-red-600"
                         >
-                          <X size={16} />
                           Delete
                         </button>
                       </td>
@@ -222,110 +250,61 @@ const SubscriptionPlans = () => {
             </div>
           ) : null}
 
-
           {/* EMPTY STATE */}
           {!loading && plans.length === 0 && (
-            <div className="flex flex-col items-center mt-20 justify-center h-[300px] text-center">
-              <div className="w-20 h-20 flex items-center justify-center rounded-full bg-red-100 mb-4">
-                <Plus className="text-red-600" size={36} />
-              </div>
-
-              <h3 className="text-lg font-semibold text-gray-800 mb-1">
-                No Plans Found
-              </h3>
-
-              <p className="text-sm text-gray-500 max-w-sm mb-4">
-                You haven’t created any subscription plans yet.
-              </p>
-
-              <button
-                onClick={() => setShowModal(true)}
-                className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg flex items-center gap-2 font-medium"
-              >
-                <Plus size={18} />
-                Create Plan
-              </button>
+            <div className="text-center mt-10">
+              No Plans Found
             </div>
           )}
         </main>
       </div>
 
-      {/* ================= MODAL ================= */}
+      {/* MODAL */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-red-600"
-            >
-              <X size={20} />
-            </button>
-
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">
-              Create Subscription Plan
-            </h3>
-
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
-              </div>
-            )}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-2xl p-8 transform transition-all">
+            <h3 className="text-2xl font-bold text-gray-800 mb-6">Create New Plan</h3>
 
             <div className="space-y-4">
-              {/* PLAN NAME */}
+              {/* Plan Name Input */}
               <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Plan Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Plan Name</label>
                 <input
-                  type="text"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#DC2626] focus:border-transparent outline-none transition-all"
                   value={planName}
                   onChange={(e) => setPlanName(e.target.value)}
-                  disabled={creating}
-                  placeholder="e.g. Basic Plan"
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300
-                             focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:bg-gray-100"
+                  placeholder="e.g. Premium Monthly"
                 />
               </div>
 
-              {/* PLAN PRICE */}
+              {/* Price Input */}
               <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Price Per Day (₹)
-                </label>
-
+                <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
                 <input
-                  type="number"
-                  min="0"
-                  step="1"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#DC2626] focus:border-transparent outline-none transition-all"
                   value={planPrice}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "" || Number(value) >= 0) {
-                      setPlanPrice(value);
-                    }
-                  }}
-                  disabled={creating}
-                  placeholder="e.g. 99"
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300
-               focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:bg-gray-100"
+                  onChange={(e) => setPlanPrice(e.target.value)}
+                  placeholder="₹0.00"
+                  type="number"
                 />
               </div>
 
-
-              {/* ACTIONS */}
-              <div className="flex gap-3 pt-2">
+              {/* Action Buttons */}
+              <div className="flex gap-3 mt-8">
                 <button
-                  onClick={() => setShowModal(false)}
-                  disabled={creating}
-                  className="flex-1 border py-2 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                  onClick={() => setShowModal(false)} // Close modal logic
+                  className="flex-1 px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md font-semibold transition-colors"
                 >
                   Cancel
                 </button>
+
                 <button
                   onClick={handleCreatePlan}
                   disabled={creating}
-                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-500 text-white py-2 rounded-lg font-medium disabled:cursor-not-allowed"
+                  className={`flex-1 px-4 py-2 rounded-md font-semibold text-white transition-all ${creating
+                      ? "bg-[#DC2626] cursor-not-allowed"
+                      : "bg-[#DC2626] hover:bg-[#DC2626] active:scale-95 shadow-md shadow-blue-200"
+                    }`}
                 >
                   {creating ? "Creating..." : "Create Plan"}
                 </button>

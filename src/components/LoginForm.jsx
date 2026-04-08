@@ -111,9 +111,9 @@ const LoginForm = () => {
     <div className="min-h-screen bg-lightGray flex flex-col items-center justify-center px-4">
       {/* Brand */}
       <div className="mb-6 text-center">
-        <img src="/logo.jpeg" alt="BookMyMechanik" className="h-28 mx-auto mb-2" />
-        <h1 className="text-2xl font-bold text-darkGray">
-          Book<span className="text-primary">My</span>Mechanik
+        <img src="/logo.png" alt="BookMyMechanik" className="h-28 mx-auto mb-2" />
+        <h1 className="text-2xl font-bold text-black tracking-wide">
+          BOOK MY MECHANIK<span className="align-top text-md ml-0">™</span>
         </h1>
       </div>
 
@@ -230,9 +230,8 @@ const LoginForm = () => {
       {/* Toast */}
       {popup.show && (
         <div
-          className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg text-white shadow-lg ${
-            popup.type === "success" ? "bg-primary" : "bg-red-600"
-          }`}
+          className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-lg text-white shadow-lg ${popup.type === "success" ? "bg-primary" : "bg-red-600"
+            }`}
         >
           {popup.message}
         </div>

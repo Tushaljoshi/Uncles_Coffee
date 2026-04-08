@@ -70,6 +70,11 @@ const TopBar = ({ toggleSidebar }) => {
       title: "Media & Banners",
       subtitle: "Upload, manage, and control promotional banners and media assets",
     },
+
+    "/add-review": {
+      title: "Reviews & Ratings",
+      subtitle: "Manage customer video testimonials, ratings, and feedback profiles",
+    },
   };
 
 
@@ -119,7 +124,7 @@ const TopBar = ({ toggleSidebar }) => {
 
           {/* NOTIFICATIONS */}
           <div className="relative">
-            <button
+            {/*<button
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-2 border border-gray-200 rounded-full hover:bg-red-50 relative transition"
             >
@@ -129,7 +134,7 @@ const TopBar = ({ toggleSidebar }) => {
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
-            </button>
+              </button>*/}
 
             {showNotifications && (
               <div className="absolute right-0 mt-3 w-80 bg-white border border-gray-200 rounded-xl shadow-xl">
@@ -158,8 +163,8 @@ const TopBar = ({ toggleSidebar }) => {
                       <div
                         key={n._id}
                         className={`p-4 border-b cursor-pointer hover:bg-red-50 flex gap-3 ${!n.isRead
-                            ? "bg-red-50 border-l-4 border-red-600"
-                            : ""
+                          ? "bg-red-50 border-l-4 border-red-600"
+                          : ""
                           }`}
                       >
                         <Info size={18} className="text-red-600" />
@@ -197,10 +202,12 @@ const TopBar = ({ toggleSidebar }) => {
                 className="w-8 h-8 rounded-full"
               />
               <div className="hidden sm:block text-left">
-                <p className="text-sm font-medium text-gray-800">
-                  BookMyMechanik
+                <p className="text-sm font-bold text-black tracking-wide">
+                  BOOK MY MECHANIK<span className="align-top text-md ml-0">™</span>
                 </p>
-                <p className="text-xs text-gray-500">Admin Panel</p>
+                <p className="text-xs text-gray-500">
+                  Admin Panel
+                </p>
               </div>
               <ChevronDown size={16} className="text-gray-500" />
             </button>

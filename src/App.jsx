@@ -13,6 +13,9 @@ import HelpSupport from "./pages/Help&Support";
 import Dispute from "./pages/Dispute";
 import Plan from "./pages/CreatePlan"
 import UserWallet from "./pages/UserWallet"
+import CustomerAssets from "./pages/Customer_Assets";
+import AddReview from "./pages/AddReview";
+import CustomerBooking from "./pages/CustomerBooking";
 
 function App() {
   return (
@@ -31,6 +34,9 @@ function App() {
         <Route path="/dispute" element={<Dispute/>} />
         <Route path="/plan" element={<Plan/>} />
         <Route path="/userwallet" element={<UserWallet/>} />
+        <Route path="/assests" element={<CustomerAssets/>} />
+        <Route path="/add-review" element={<AddReview/>} />
+        <Route path="/customer-booking" element={<CustomerBooking/>} />
       </Routes>
     </Router>
   );
