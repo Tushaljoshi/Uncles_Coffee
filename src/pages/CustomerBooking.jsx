@@ -253,24 +253,24 @@ const getRateLabel = (rate) => {
 /* ================= EXCEL EXPORT ENGINE ================= */
 const buildAndExport = (bookings, { fileName, sheetName }) => {
   const rows = bookings.map((b, idx) => ({
-    "S.No":               idx + 1,
-    "Booking ID":         b.id,
-    "Customer Name":      b.fullName,
-    "Phone":              b.phone,
-    "Flat No":            b.flatNo,
-    "Address":            b.address,
-    "Vehicle Brand":      b.vehicleBrand,
-    "Vehicle Type":       b.vehicleType,
-    "Reg. Number":        b.regNumber,
-    "Fuel Type":          b.fuelType,
-    "Service Type":       b.serviceType,
-    "Rate Category":      getRateLabel(b.selectedRate),
-    "Service Date":       b.serviceDate,
-    "Time Slot":          b.timeSlot,
-    "Issues":             (b.issues || []).join(", "),
-    "Additional Issues":  b.additionalIssues || "",
-    "Terms Agreed":       b.agreed ? "Yes" : "No",
-    "Booked On":          b.createdAt?._seconds
+    "S.No": idx + 1,
+    "Booking ID": b.id,
+    "Customer Name": b.fullName,
+    "Phone": b.phone,
+    "Flat No": b.flatNo,
+    "Address": b.address,
+    "Vehicle Brand": b.vehicleBrand,
+    "Vehicle Type": b.vehicleType,
+    "Reg. Number": b.regNumber,
+    "Fuel Type": b.fuelType,
+    "Service Type": b.serviceType,
+    "Rate Category": getRateLabel(b.selectedRate),
+    "Service Date": b.serviceDate,
+    "Time Slot": b.timeSlot,
+    "Issues": (b.issues || []).join(", "),
+    "Additional Issues": b.additionalIssues || "",
+    "Terms Agreed": b.agreed ? "Yes" : "No",
+    "Booked On": b.createdAt?._seconds
       ? new Date(b.createdAt._seconds * 1000).toLocaleDateString("en-IN")
       : "N/A",
   }));
@@ -368,12 +368,18 @@ const AdminBookings = () => {
   };
 
   /* ── Filtered rows ── */
-  const filteredBookings = bookings.filter(b =>
-    b.fullName?.toLowerCase().includes(search.toLowerCase()) ||
-    b.phone?.includes(search) ||
-    b.regNumber?.toLowerCase().includes(search.toLowerCase()) ||
-    b.serviceType?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredBookings = bookings
+    .filter(b =>
+      b.fullName?.toLowerCase().includes(search.toLowerCase()) ||
+      b.phone?.includes(search) ||
+      b.regNumber?.toLowerCase().includes(search.toLowerCase()) ||
+      b.serviceType?.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      const aTime = a.createdAt?._seconds || 0;
+      const bTime = b.createdAt?._seconds || 0;
+      return bTime - aTime; // latest first
+    });
 
   /* ── Selection logic ── */
   const allFilteredSelected = filteredBookings.length > 0 && filteredBookings.every(b => selectedIds.has(b.id));
@@ -595,7 +601,9 @@ const AdminBookings = () => {
 
                           {/* Booked On */}
                           <td className="px-4 py-4">
-                            <span className="text-xs text-slate-500">{formatCreatedAt(b.createdAt)}</span>
+                            <span className="text-xs text-slate-500">
+                              {formatCreatedAt(b.createdAt)}
+                            </span>
                           </td>
 
                           {/* Actions */}
