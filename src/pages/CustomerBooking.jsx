@@ -506,7 +506,6 @@ const AdminBookings = () => {
                     <th className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vehicle</th>
                     <th className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Service</th>
                     <th className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date & Slot</th>
-                    <th className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Issues</th>
                     <th className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Booked On</th>
                     <th className="px-4 py-3.5 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -589,15 +588,6 @@ const AdminBookings = () => {
                             </div>
                           </td>
 
-                          {/* Issues */}
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-red-50 text-red-600 text-[10px] font-bold flex items-center justify-center border border-red-100">
-                                {b.issues?.length || 0}
-                              </span>
-                              <span className="text-xs text-slate-500">issue{b.issues?.length !== 1 ? "s" : ""}</span>
-                            </div>
-                          </td>
 
                           {/* Booked On */}
                           <td className="px-4 py-4">
