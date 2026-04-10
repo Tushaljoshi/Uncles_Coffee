@@ -129,32 +129,42 @@ const AddReview = () => {
   // ── Upload ───────────────────────────────────────────
   const uploadReview = async (e) => {
     e.preventDefault();
-    if (!videoFile) { showPopup("error", "Please select a video"); return; }
+
+    if (!videoFile) {
+      showPopup("error", "Please select a video");
+      return;
+    }
 
     try {
       setLoading(true);
+
       const data = new FormData();
       data.append("name", formData.name);
       data.append("title", formData.title);
       data.append("rating", formData.rating);
       data.append("bio", formData.bio);
-      data.append("videoUrl", videoFile);
 
-      const res = await fetch(`${API_BASE}/api/review-Rating/create`, { method: "POST", body: data });
+      // ✅🔥 FIXED FIELD NAME
+      data.append("video", videoFile);
+
+      const res = await fetch(`${API_BASE}/api/review-Rating/create`, {
+        method: "POST",
+        body: data,
+      });
+
       const result = await res.json();
 
       if (result.success) {
         showPopup("success", "Review uploaded successfully");
-        const newReview = { id: result.id, ...formData, videoUrl: result.videoUrl };
-        setReviews((prev) => [newReview, ...prev]);
-        setNewIds((prev) => new Set(prev).add(result.id));
-        setTimeout(() => setNewIds((prev) => { const s = new Set(prev); s.delete(result.id); return s; }), 3000);
+
+        setReviews((prev) => [result.data, ...prev]);
+
         setFormData({ name: "", title: "", rating: 5, bio: "" });
         clearVideo();
       } else {
         showPopup("error", result.message || "Upload failed");
       }
-    } catch {
+    } catch (error) {
       showPopup("error", "Upload failed");
     } finally {
       setLoading(false);
