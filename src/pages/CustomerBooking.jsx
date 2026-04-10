@@ -50,11 +50,12 @@ const DetailCard = ({ label, value, icon }) => (
   </div>
 );
 
-const DetailModal = ({ booking, onClose }) => {
+const DetailModal = ({ booking, serialNo, onClose }) => {
   if (!booking) return null;
   const createdAt = booking.createdAt?._seconds
     ? new Date(booking.createdAt._seconds * 1000).toLocaleString()
     : "N/A";
+  const formattedID = `BMM-${formatDateForID(booking.createdAt)}-${serialNo}`;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
       <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
@@ -65,7 +66,7 @@ const DetailModal = ({ booking, onClose }) => {
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-800">{booking.fullName}</h2>
-              <span className="text-xs text-slate-400">{booking.id}</span>
+              <span className="text-xs text-slate-400">{formattedID}</span>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={20} /></button>
@@ -194,7 +195,7 @@ const ExportModal = ({ selectedCount, allCount, onClose, onExport }) => {
             <FileText size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-slate-600 leading-relaxed">
               Will export <span className="font-bold text-slate-800">{count} booking{count !== 1 ? "s" : ""}</span> with{" "}
-              <span className="font-bold text-slate-800">18 columns</span> including customer info, vehicle details, issues, and timestamps into{" "}
+              <span className="font-bold text-slate-800">20 columns</span> including customer info, vehicle details, issues, timestamps, and WhatsApp messages into{" "}
               <span className="font-mono text-green-700 font-bold">{fileName || "export"}.xlsx</span>.
               Headers will be frozen and auto-filter enabled.
             </p>
@@ -250,11 +251,79 @@ const getRateLabel = (rate) => {
   return rate;
 };
 
+const formatDateForID = (ts) => {
+  if (!ts?._seconds) return "N/A";
+  const d = new Date(ts._seconds * 1000);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const formatServiceDateForMsg = (dateStr) => {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+};
+
+const generateWhatsAppMessage = (b, idx) => {
+  const ticketID = `BMM-${formatDateForID(b.createdAt)}-${idx + 1}`;
+  const vehicle = `${b.vehicleBrand} ${b.vehicleType}`;
+  const serviceSchedule = `${formatServiceDateForMsg(b.serviceDate)} | ${b.timeSlot}`;
+  const rate = b.selectedRate && typeof b.selectedRate === "object"
+    ? `${b.selectedRate.label} - ₹${b.selectedRate.price || 'N/A'} (${b.selectedRate.sub})`
+    : b.selectedRate || "N/A";
+  return `Hello *${b.fullName} * 👋
+
+Thank you for choosing Book My Mechanik 🔧
+Your service request has been successfully confirmed.
+
+🧾 Ticket ID: ${ticketID}
+🚲 Vehicle: ${vehicle}
+📅 Service Schedule: ${serviceSchedule}
+
+⚙️ Engine Selected CC & Price: ${rate}
+
+Our mechanic will reach out to you on the scheduled date and time.
+
+— Team Book My Mechanik`;
+};
+
+const generateMechanicMessage = (b, idx) => {
+  const ticketID = `BMM-${formatDateForID(b.createdAt)}-${idx + 1}`;
+  const issues = (b.issues || []).join(", ");
+  const additional = b.additionalIssues || "None";
+  const address = `Flat ${b.flatNo}, ${b.address}`;
+  const mapLink = `https://www.google.com/maps/search/?api=1&query=Pune+${encodeURIComponent(address)}`;
+  return `🛠 Book My Mechanik – Service Request
+
+🔧 New Service Ticket Assigned
+
+🎫 Ticket ID: ${ticketID}
+👤 Customer: ${b.fullName}
+📞 Phone: ${b.phone}
+
+🏍 Vehicle: ${b.vehicleBrand} ${b.vehicleType}
+🔢 Reg No: ${b.regNumber}
+
+📅 Service Date: ${formatServiceDateForMsg(b.serviceDate)}
+⏰ Time Slot: ${b.timeSlot}
+
+🛠 Issues: ${issues}
+➕ Additional: ${additional}
+
+🏢 Flat / Address: ${address}
+📍 Location Details: ${mapLink}`;
+};
+
 /* ================= EXCEL EXPORT ENGINE ================= */
 const buildAndExport = (bookings, { fileName, sheetName }) => {
   const rows = bookings.map((b, idx) => ({
     "S.No": idx + 1,
-    "Booking ID": b.id,
+    "Booking ID": `BMM-${formatDateForID(b.createdAt)}-${idx + 1}`,
     "Customer Name": b.fullName,
     "Phone": b.phone,
     "Flat No": b.flatNo,
@@ -273,6 +342,8 @@ const buildAndExport = (bookings, { fileName, sheetName }) => {
     "Booked On": b.createdAt?._seconds
       ? new Date(b.createdAt._seconds * 1000).toLocaleDateString("en-IN")
       : "N/A",
+    "Customer WhatsApp Message": generateWhatsAppMessage(b, idx),
+    "Mechanic WhatsApp Message": generateMechanicMessage(b, idx),
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -297,6 +368,8 @@ const buildAndExport = (bookings, { fileName, sheetName }) => {
     { wch: 26 },  // Additional Issues
     { wch: 13 },  // Terms Agreed
     { wch: 14 },  // Booked On
+    { wch: 100 }, // Customer WhatsApp Message
+    { wch: 100 }, // Mechanic WhatsApp Message
   ];
 
   // Freeze header row
@@ -600,7 +673,7 @@ const AdminBookings = () => {
                           <td className="px-4 py-4">
                             <div className="flex items-center justify-center gap-2">
                               <button
-                                onClick={() => setSelectedBooking(b)}
+                                onClick={() => setSelectedBooking({booking: b, serialNo: idx + 1})}
                                 title="View Details"
                                 className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors"
                               >
@@ -641,7 +714,7 @@ const AdminBookings = () => {
       </div>
 
       {/* Modals */}
-      {selectedBooking && <DetailModal booking={selectedBooking} onClose={() => setSelectedBooking(null)} />}
+      {selectedBooking && <DetailModal booking={selectedBooking.booking} serialNo={selectedBooking.serialNo} onClose={() => setSelectedBooking(null)} />}
       {deleteTarget && (
         <ConfirmModal
           booking={deleteTarget}
