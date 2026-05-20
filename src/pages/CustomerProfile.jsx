@@ -10,37 +10,7 @@ import {
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
-/* ================= DUMMY CUSTOMER DATA ================= */
-
-const DUMMY_CUSTOMERS = [
-  {
-    id: 1,
-    name: "Vivek Sharma",
-    email: "vivek054@gmail.com",
-    phone: "+91 9841626813",
-    dob: "12/08/1996",
-    gender: "Male",
-    profileImage: "https://i.pravatar.cc/150?img=12",
-  },
-  {
-    id: 2,
-    name: "Ananya Verma",
-    email: "ananya@gmail.com",
-    phone: "+91 9876543210",
-    dob: "05/04/1998",
-    gender: "Female",
-    profileImage: "https://i.pravatar.cc/150?img=32",
-  },
-  {
-    id: 3,
-    name: "Rahul Mehta",
-    email: "rahul.mehta@gmail.com",
-    phone: "+91 9988776655",
-    dob: "21/01/1994",
-    gender: "Male",
-    profileImage: "https://i.pravatar.cc/150?img=45",
-  },
-];
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 /* ================= SKELETON CARD ================= */
 
@@ -59,18 +29,47 @@ const AdminCustomerProfile = () => {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [customers, setCustomers] = useState([]);
 
   const [search, setSearch] = useState("");
   const [genderFilter, setGenderFilter] = useState("all");
 
-  /* SIMULATE LOADING */
+  /* FETCH CUSTOMERS FROM API */
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 1200);
-    return () => clearTimeout(t);
+    const fetchCustomers = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch(
+          `${API_BASE_URL}/api/customer-profile/all-profiles`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && Array.isArray(data.data)) {
+          setCustomers(data.data);
+        } else {
+          throw new Error("Invalid API response format");
+        }
+      } catch (err) {
+        console.error("Error fetching customers:", err);
+        setError(err.message || "Failed to fetch customers");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCustomers();
   }, []);
 
   /* FILTER LOGIC */
-  const filteredCustomers = DUMMY_CUSTOMERS.filter((u) => {
+  const filteredCustomers = customers.filter((u) => {
     const keyword = search.toLowerCase();
 
     const matchesSearch =
@@ -79,7 +78,8 @@ const AdminCustomerProfile = () => {
       u.phone.includes(keyword);
 
     const matchesGender =
-      genderFilter === "all" || u.gender === genderFilter;
+      genderFilter === "all" || 
+      u.gender.toLowerCase() === genderFilter.toLowerCase();
 
     return matchesSearch && matchesGender;
   });
@@ -96,6 +96,19 @@ const AdminCustomerProfile = () => {
           <h1 className="text-2xl font-bold text-gray-800 mb-6">
             Customer Profiles
           </h1>
+
+          {/* ERROR MESSAGE */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+              <p className="text-red-800 text-sm font-medium">Error: {error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-2 text-red-600 hover:text-red-800 text-sm font-medium underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* SEARCH & FILTER */}
           <div className="bg-white p-4 rounded-xl shadow-sm border mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -116,8 +129,8 @@ const AdminCustomerProfile = () => {
               className="px-3 py-2 rounded-lg border focus:ring-2 focus:ring-red-500"
             >
               <option value="all">All Gender</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
             </select>
           </div>
 
@@ -155,7 +168,7 @@ const AdminCustomerProfile = () => {
             ) : (
               filteredCustomers.map((user) => (
                 <div
-                  key={user.id}
+                  key={user.userId}
                   className="bg-white rounded-2xl shadow-sm border p-5"
                 >
                   <div className="flex justify-center">

@@ -20,7 +20,6 @@ const CreateService = () => {
   const [categoryName, setCategoryName] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("");
-  const [isNewCategory, setIsNewCategory] = useState(true);
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
   const [itemDesc, setItemDesc] = useState("");
@@ -92,12 +91,38 @@ const CreateService = () => {
   useEffect(() => { fetchAllData(); }, [activeTab]);
 
   const handleCreate = async () => {
-    if (!itemName) return alert("Name is required");
+    if (modalMode === "vehicle") {
+      if (!categoryName?.trim()) return alert("Vehicle name is required");
+      if (!iconFile) return alert("Vehicle icon is required");
+    } else if (!itemName?.trim()) {
+      return alert("Name is required");
+    }
+    if (modalMode === "service" && activeTab === "vehicle" && !selectedCategoryId) {
+      return alert("Please select a vehicle");
+    }
+    if ((modalMode === "service" || modalMode === "type") && !iconFile) {
+      return alert("Icon/Image is required");
+    }
     try {
       setLoading(true);
-      if (modalMode === "type") {
+      if (modalMode === "vehicle") {
+        const vFormData = new FormData();
+        vFormData.append("name", categoryName.trim());
+        vFormData.append("icon", iconFile);
+
+        const response = await fetch(`${API_BASE_URL}/api/admin/vehicle`, {
+          method: "POST",
+          body: vFormData,
+        });
+
+        if (!response.ok) throw new Error("Failed to create vehicle");
+
+        setShowModal(false);
+        resetModal();
+        fetchAllData();
+      } else if (modalMode === "type") {
         const formData = new FormData();
-        formData.append("name", itemName);
+        formData.append("name", itemName.trim());
         formData.append("price", itemPrice);
         formData.append("description", itemDesc);
         formData.append("image", iconFile);
@@ -113,22 +138,12 @@ const CreateService = () => {
           fetchAllData();
         }
       } else {
-        let targetId = selectedCategoryId;
-        if (activeTab === "vehicle" && isNewCategory) {
-          const vFormData = new FormData();
-          vFormData.append("name", categoryName);
-          vFormData.append("icon", iconFile);
-          const vRes = await fetch(`${API_BASE_URL}/api/admin/vehicle`, { method: "POST", body: vFormData });
-          const vData = await vRes.json();
-          targetId = vData.id;
-        }
-
         const formData = new FormData();
-        formData.append("name", itemName);
+        formData.append("name", itemName.trim());
         formData.append("icon", iconFile);
 
         const endpoint = activeTab === "vehicle"
-          ? `${API_BASE_URL}/api/admin/vehicle/${targetId}/service`
+          ? `${API_BASE_URL}/api/admin/vehicle/${selectedCategoryId}/service`
           : `${API_BASE_URL}/api/admin/equipment`;
 
         const response = await fetch(endpoint, { method: "POST", body: formData });
@@ -175,11 +190,19 @@ const CreateService = () => {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold">Service Management</h2>
             <div className="flex gap-2">
-              <button onClick={() => { setModalMode("service"); setShowModal(true); }} className="bg-[#DC2626] text-white px-4 py-2 rounded-lg flex items-center gap-2">
+              {activeTab === "vehicle" && (
+                <button
+                  onClick={() => { resetModal(); setModalMode("vehicle"); setShowModal(true); }}
+                  className="bg-[#DC2626] text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                >
+                  New Vehicle
+                </button>
+              )}
+              <button onClick={() => { resetModal(); setModalMode("service"); setShowModal(true); }} className="bg-[#DC2626] text-white px-4 py-2 rounded-lg flex items-center gap-2">
                 New Service
               </button>
               {activeTab === "vehicle" && (
-                <button onClick={() => { setModalMode("type"); setShowModal(true); }} className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                <button onClick={() => { resetModal(); setModalMode("type"); setShowModal(true); }} className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
                 New Service Type
                 </button>
               )}
@@ -262,7 +285,9 @@ const CreateService = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex justify-between mb-4 border-b pb-2">
-              <h3 className="text-xl font-bold">{modalMode === "type" ? "Add Service Type" : "Add Service"}</h3>
+              <h3 className="text-xl font-bold">
+                {modalMode === "type" ? "Add Service Type" : modalMode === "vehicle" ? "Add Vehicle" : "Add Service"}
+              </h3>
               <X className="cursor-pointer hover:text-red-600" onClick={() => setShowModal(false)} />
             </div>
 
@@ -283,21 +308,37 @@ const CreateService = () => {
                   <input type="number" placeholder="Price (e.g. 500)" className="w-full border p-2 rounded-lg" onChange={(e) => setItemPrice(e.target.value)} />
                   <textarea placeholder="Description" className="w-full border p-2 rounded-lg" onChange={(e) => setItemDesc(e.target.value)} />
                 </>
+              ) : modalMode === "vehicle" ? (
+                <input
+                  type="text"
+                  placeholder="Vehicle Name"
+                  className="w-full border p-2 rounded-lg"
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                />
               ) : (
                 <>
                   {activeTab === "vehicle" && (
-                    <select className="w-full border p-2 rounded-lg" onChange={(e) => { setIsNewCategory(e.target.value === "new"); setSelectedCategoryId(e.target.value); }}>
-                      <option value="new">Add New Vehicle Type</option>
+                    <select
+                      className="w-full border p-2 rounded-lg"
+                      value={selectedCategoryId}
+                      onChange={(e) => setSelectedCategoryId(e.target.value)}
+                    >
+                      <option value="">Choose Vehicle</option>
                       {categories.vehicle.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </select>
-                  )}
-                  {isNewCategory && activeTab === "vehicle" && (
-                    <input type="text" placeholder="Vehicle Name" className="w-full border p-2 rounded-lg" onChange={(e) => setCategoryName(e.target.value)} />
                   )}
                 </>
               )}
 
-              <input type="text" placeholder="Name" className="w-full border p-2 rounded-lg" onChange={(e) => setItemName(e.target.value)} />
+              {modalMode !== "vehicle" && (
+                <input
+                  type="text"
+                  placeholder="Name"
+                  className="w-full border p-2 rounded-lg"
+                  onChange={(e) => setItemName(e.target.value)}
+                />
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-1">Upload Icon/Image</label>
