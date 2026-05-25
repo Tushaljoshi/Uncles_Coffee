@@ -46,6 +46,11 @@ const CreateService = () => {
   const [modelName, setModelName] = useState("");
   const [editingModelId, setEditingModelId] = useState(null);
   const [modelLoading, setModelLoading] = useState(false);
+  const [selectedModelId, setSelectedModelId] = useState(null);
+  const [fuelsList, setFuelsList] = useState([]);
+  const [fuelName, setFuelName] = useState("");
+  const [editingFuelId, setEditingFuelId] = useState(null);
+  const [fuelLoading, setFuelLoading] = useState(false);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -178,6 +183,10 @@ const CreateService = () => {
     setModelsList([]);
     setModelName("");
     setEditingModelId(null);
+    setSelectedModelId(null);
+    setFuelsList([]);
+    setFuelName("");
+    setEditingFuelId(null);
     setShowBrandModal(false);
   };
 
@@ -244,9 +253,36 @@ const CreateService = () => {
 
   const selectBrandModels = (brandId) => {
     setSelectedBrandId(brandId);
+    setSelectedModelId(null);
     setEditingModelId(null);
     setModelName("");
+    setFuelsList([]);
+    setFuelName("");
+    setEditingFuelId(null);
     fetchModels(brandsVehicleId, brandId);
+  };
+
+  const fetchFuels = async (vehicleId, brandId, modelId) => {
+    if (!vehicleId || !brandId || !modelId) return;
+    setFuelLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand/${brandId}/model/${modelId}/fuel`);
+      if (!res.ok) throw new Error("Failed to fetch fuels");
+      const data = await res.json();
+      setFuelsList(Array.isArray(data) ? data : data.data || []);
+    } catch (err) {
+      alert(err.message || "Failed to load fuels");
+      setFuelsList([]);
+    } finally {
+      setFuelLoading(false);
+    }
+  };
+
+  const selectModelFuels = (modelId) => {
+    setSelectedModelId(modelId);
+    setEditingFuelId(null);
+    setFuelName("");
+    fetchFuels(brandsVehicleId, selectedBrandId, modelId);
   };
 
   const handleCreateModel = async () => {
@@ -305,11 +341,81 @@ const CreateService = () => {
       if (!res.ok) throw new Error("Failed to delete model");
       const data = await res.json().catch(() => ({}));
       alert(data.message || "Model deleted");
+      if (selectedModelId === modelId) {
+        setSelectedModelId(null);
+        setFuelsList([]);
+        setFuelName("");
+        setEditingFuelId(null);
+      }
       fetchModels(brandsVehicleId, selectedBrandId);
     } catch (err) {
       alert(err.message || "Delete model failed");
     } finally {
       setModelLoading(false);
+    }
+  };
+
+  const handleCreateFuel = async () => {
+    if (!fuelName?.trim()) return alert("Fuel name is required");
+    if (!brandsVehicleId || !selectedBrandId || !selectedModelId) return alert("Select a model first");
+    try {
+      setFuelLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${selectedModelId}/fuel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fuelName.trim() })
+      });
+      if (!res.ok) throw new Error("Failed to create fuel");
+      const data = await res.json().catch(() => ({}));
+      alert(data.message || "Fuel created");
+      setFuelName("");
+      fetchFuels(brandsVehicleId, selectedBrandId, selectedModelId);
+    } catch (err) {
+      alert(err.message || "Create fuel failed");
+    } finally {
+      setFuelLoading(false);
+    }
+  };
+
+  const handleUpdateFuel = async () => {
+    if (!fuelName?.trim()) return alert("Fuel name is required");
+    if (!brandsVehicleId || !selectedBrandId || !selectedModelId || !editingFuelId) return alert("Missing fuel information");
+    try {
+      setFuelLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${selectedModelId}/fuel/${editingFuelId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fuelName.trim() })
+      });
+      if (!res.ok) throw new Error("Failed to update fuel");
+      const data = await res.json().catch(() => ({}));
+      alert(data.message || "Fuel updated");
+      setFuelName("");
+      setEditingFuelId(null);
+      fetchFuels(brandsVehicleId, selectedBrandId, selectedModelId);
+    } catch (err) {
+      alert(err.message || "Update fuel failed");
+    } finally {
+      setFuelLoading(false);
+    }
+  };
+
+  const handleDeleteFuel = async (fuelId) => {
+    if (!brandsVehicleId || !selectedBrandId || !selectedModelId || !fuelId) return;
+    if (!window.confirm("Delete this fuel?")) return;
+    try {
+      setFuelLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${selectedModelId}/fuel/${fuelId}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) throw new Error("Failed to delete fuel");
+      const data = await res.json().catch(() => ({}));
+      alert(data.message || "Fuel deleted");
+      fetchFuels(brandsVehicleId, selectedBrandId, selectedModelId);
+    } catch (err) {
+      alert(err.message || "Delete fuel failed");
+    } finally {
+      setFuelLoading(false);
     }
   };
 
@@ -325,9 +431,13 @@ const CreateService = () => {
       fetchBrands(brandsVehicleId);
       if (selectedBrandId === brandId) {
         setSelectedBrandId(null);
+        setSelectedModelId(null);
         setModelsList([]);
         setModelName("");
         setEditingModelId(null);
+        setFuelsList([]);
+        setFuelName("");
+        setEditingFuelId(null);
       }
     } catch (err) {
       alert(err.message || "Delete brand failed");
@@ -1137,6 +1247,13 @@ const CreateService = () => {
                             <span className="text-gray-700">{m.name}</span>
                             <div className="flex items-center gap-2">
                               <button
+                                onClick={() => selectModelFuels(m.id)}
+                                className="p-2 rounded hover:bg-gray-100"
+                                title="View Fuels"
+                              >
+                                <Search size={16} className="text-gray-600" />
+                              </button>
+                              <button
                                 onClick={() => {
                                   setEditingModelId(m.id);
                                   setModelName(m.name || "");
@@ -1150,6 +1267,78 @@ const CreateService = () => {
                                 onClick={() => handleDeleteModel(m.id)}
                                 className="p-2 rounded hover:bg-gray-100"
                                 title="Delete Model"
+                              >
+                                <Trash2 size={16} className="text-gray-600" />
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedModelId && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="font-semibold">Fuels for {modelsList.find((m) => m.id === selectedModelId)?.name || "Selected Model"}</h4>
+                      <p className="text-sm text-gray-500">Create or manage fuel types under this model.</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedModelId(null);
+                        setFuelsList([]);
+                        setFuelName("");
+                        setEditingFuelId(null);
+                      }}
+                      className="text-sm text-red-600 hover:underline"
+                    >
+                      Close fuel list
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="flex-1 border p-2 rounded-lg"
+                        value={fuelName}
+                        onChange={(e) => setFuelName(e.target.value)}
+                        placeholder="e.g. Petrol"
+                      />
+                      {editingFuelId ? (
+                        <button onClick={handleUpdateFuel} disabled={fuelLoading} className="bg-yellow-500 text-white px-4 py-2 rounded-lg">{fuelLoading ? 'Updating...' : 'Update'}</button>
+                      ) : (
+                        <button onClick={handleCreateFuel} disabled={fuelLoading} className="bg-red-600 text-white px-4 py-2 rounded-lg">{fuelLoading ? 'Creating...' : 'Create'}</button>
+                      )}
+                    </div>
+
+                    {fuelLoading && fuelsList.length === 0 ? (
+                      <p className="text-sm text-gray-500">Loading fuels...</p>
+                    ) : fuelsList.length === 0 ? (
+                      <p className="text-sm text-gray-400">No fuels yet for this model.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {fuelsList.map((f) => (
+                          <li key={f.id} className="flex items-center justify-between border p-2 rounded-lg">
+                            <span className="text-gray-700">{f.name}</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingFuelId(f.id);
+                                  setFuelName(f.name || "");
+                                }}
+                                className="p-2 rounded hover:bg-gray-100"
+                                title="Edit Fuel"
+                              >
+                                <Edit2 size={16} className="text-gray-600" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteFuel(f.id)}
+                                className="p-2 rounded hover:bg-gray-100"
+                                title="Delete Fuel"
                               >
                                 <Trash2 size={16} className="text-gray-600" />
                               </button>
