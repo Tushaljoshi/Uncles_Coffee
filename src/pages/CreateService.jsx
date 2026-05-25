@@ -41,6 +41,11 @@ const CreateService = () => {
   const [brandName, setBrandName] = useState("");
   const [editingBrandIdLocal, setEditingBrandIdLocal] = useState(null);
   const [brandLoading, setBrandLoading] = useState(false);
+  const [selectedBrandId, setSelectedBrandId] = useState(null);
+  const [modelsList, setModelsList] = useState([]);
+  const [modelName, setModelName] = useState("");
+  const [editingModelId, setEditingModelId] = useState(null);
+  const [modelLoading, setModelLoading] = useState(false);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -156,6 +161,10 @@ const CreateService = () => {
     setBrandsVehicleId(vehicleId);
     setBrandName("");
     setEditingBrandIdLocal(null);
+    setSelectedBrandId(null);
+    setModelsList([]);
+    setModelName("");
+    setEditingModelId(null);
     fetchBrands(vehicleId);
     setShowBrandModal(true);
   };
@@ -165,6 +174,10 @@ const CreateService = () => {
     setBrandsList([]);
     setBrandName("");
     setEditingBrandIdLocal(null);
+    setSelectedBrandId(null);
+    setModelsList([]);
+    setModelName("");
+    setEditingModelId(null);
     setShowBrandModal(false);
   };
 
@@ -213,6 +226,93 @@ const CreateService = () => {
     }
   };
 
+  const fetchModels = async (vehicleId, brandId) => {
+    if (!vehicleId || !brandId) return;
+    setModelLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand/${brandId}/model`);
+      if (!res.ok) throw new Error("Failed to fetch models");
+      const data = await res.json();
+      setModelsList(Array.isArray(data) ? data : data.data || []);
+    } catch (err) {
+      alert(err.message || "Failed to load models");
+      setModelsList([]);
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
+  const selectBrandModels = (brandId) => {
+    setSelectedBrandId(brandId);
+    setEditingModelId(null);
+    setModelName("");
+    fetchModels(brandsVehicleId, brandId);
+  };
+
+  const handleCreateModel = async () => {
+    if (!modelName?.trim()) return alert("Model name is required");
+    if (!brandsVehicleId || !selectedBrandId) return alert("Select a brand first");
+    try {
+      setModelLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName.trim() })
+      });
+      if (!res.ok) throw new Error("Failed to create model");
+      const data = await res.json().catch(() => ({}));
+      alert(data.message || "Model created");
+      setModelName("");
+      fetchModels(brandsVehicleId, selectedBrandId);
+    } catch (err) {
+      alert(err.message || "Create model failed");
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
+  const handleUpdateModel = async () => {
+    if (!modelName?.trim()) return alert("Model name is required");
+    if (!brandsVehicleId || !selectedBrandId || !editingModelId) return alert("Missing model information");
+    try {
+      setModelLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${editingModelId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName.trim() })
+      });
+      if (!res.ok) throw new Error("Failed to update model");
+      const data = await res.json().catch(() => ({}));
+      alert(data.message || "Model updated");
+      setModelName("");
+      setEditingModelId(null);
+      fetchModels(brandsVehicleId, selectedBrandId);
+    } catch (err) {
+      alert(err.message || "Update model failed");
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
+  const handleDeleteModel = async (modelId) => {
+    if (!brandsVehicleId || !selectedBrandId || !modelId) return;
+    if (!window.confirm("Delete this model?")) return;
+    try {
+      setModelLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${modelId}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) throw new Error("Failed to delete model");
+      const data = await res.json().catch(() => ({}));
+      alert(data.message || "Model deleted");
+      fetchModels(brandsVehicleId, selectedBrandId);
+    } catch (err) {
+      alert(err.message || "Delete model failed");
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
   const handleDeleteBrand = async (brandId) => {
     if (!brandsVehicleId || !brandId) return;
     if (!window.confirm("Delete this brand?")) return;
@@ -223,6 +323,12 @@ const CreateService = () => {
       const data = await res.json().catch(() => ({}));
       alert(data.message || "Brand deleted");
       fetchBrands(brandsVehicleId);
+      if (selectedBrandId === brandId) {
+        setSelectedBrandId(null);
+        setModelsList([]);
+        setModelName("");
+        setEditingModelId(null);
+      }
     } catch (err) {
       alert(err.message || "Delete brand failed");
     } finally {
@@ -954,6 +1060,13 @@ const CreateService = () => {
                         <span className="text-gray-700">{b.name}</span>
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={() => selectBrandModels(b.id)}
+                            className="p-2 rounded hover:bg-gray-100"
+                            title="View Models"
+                          >
+                            <Search size={16} className="text-gray-600" />
+                          </button>
+                          <button
                             onClick={() => {
                               setEditingBrandIdLocal(b.id);
                               setBrandName(b.name || "");
@@ -976,6 +1089,78 @@ const CreateService = () => {
                   </ul>
                 )}
               </div>
+
+              {selectedBrandId && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="font-semibold">Models for {brandsList.find((b) => b.id === selectedBrandId)?.name || "Selected Brand"}</h4>
+                      <p className="text-sm text-gray-500">Create or manage models under this brand.</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedBrandId(null);
+                        setModelsList([]);
+                        setModelName("");
+                        setEditingModelId(null);
+                      }}
+                      className="text-sm text-red-600 hover:underline"
+                    >
+                      Close selection
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="flex-1 border p-2 rounded-lg"
+                        value={modelName}
+                        onChange={(e) => setModelName(e.target.value)}
+                        placeholder="e.g. i20"
+                      />
+                      {editingModelId ? (
+                        <button onClick={handleUpdateModel} disabled={modelLoading} className="bg-yellow-500 text-white px-4 py-2 rounded-lg">{modelLoading ? 'Updating...' : 'Update'}</button>
+                      ) : (
+                        <button onClick={handleCreateModel} disabled={modelLoading} className="bg-red-600 text-white px-4 py-2 rounded-lg">{modelLoading ? 'Creating...' : 'Create'}</button>
+                      )}
+                    </div>
+
+                    {modelLoading && modelsList.length === 0 ? (
+                      <p className="text-sm text-gray-500">Loading models...</p>
+                    ) : modelsList.length === 0 ? (
+                      <p className="text-sm text-gray-400">No models yet for this brand.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {modelsList.map((m) => (
+                          <li key={m.id} className="flex items-center justify-between border p-2 rounded-lg">
+                            <span className="text-gray-700">{m.name}</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingModelId(m.id);
+                                  setModelName(m.name || "");
+                                }}
+                                className="p-2 rounded hover:bg-gray-100"
+                                title="Edit Model"
+                              >
+                                <Edit2 size={16} className="text-gray-600" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteModel(m.id)}
+                                className="p-2 rounded hover:bg-gray-100"
+                                title="Delete Model"
+                              >
+                                <Trash2 size={16} className="text-gray-600" />
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end">
                 <button onClick={resetBrandModal} className="px-4 py-2 rounded-lg border">Close</button>
