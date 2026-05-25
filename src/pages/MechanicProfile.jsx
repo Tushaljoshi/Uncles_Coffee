@@ -96,6 +96,30 @@ const AdminMechanicProfile = () => {
     }
   };
 
+  const generateMechanicId = async (id, fullName) => {
+    const mechanicId = window.prompt("Enter Mechanic ID:", "");
+    if (mechanicId === null || mechanicId.trim() === "") return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/master/generate-customer-ids`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName, mechanicId: mechanicId.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Mechanic ID generated successfully");
+        setSelectedMechanic(null);
+        fetchMechanics();
+      } else {
+        alert("Failed to generate Mechanic ID: " + (data.message || "Unknown error"));
+      }
+    } catch (err) { 
+      console.error(err);
+      alert("Error generating Mechanic ID");
+    }
+  };
+
   const filteredMechanics = mechanics.filter(m => {
     const mechanicId = (m.mechanicId || m.kyc?.mechanicId || m.id || "").toString().toLowerCase();
     const keyword = search.toLowerCase();
@@ -425,7 +449,13 @@ const AdminMechanicProfile = () => {
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-slate-100 flex gap-3 justify-end bg-slate-50/50">
+                <div className="p-6 border-t border-slate-100 flex gap-3 justify-end bg-slate-50/50 flex-wrap">
+                  {/* <button
+                    onClick={() => generateMechanicId(selectedMechanic.id, selectedMechanic.name)}
+                    className="px-6 py-2.5 rounded-xl border border-purple-200 text-purple-600 font-bold hover:bg-purple-50 transition-colors"
+                  >
+                    Generate Mechanic ID
+                  </button> */}
                   <button
                     onClick={() => suspendMechanic(selectedMechanic.id)}
                     className="px-6 py-2.5 rounded-xl border border-orange-200 text-orange-600 font-bold hover:bg-orange-50 transition-colors"
