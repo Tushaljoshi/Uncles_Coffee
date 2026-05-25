@@ -68,14 +68,26 @@ const AdminCustomerProfile = () => {
     fetchCustomers();
   }, []);
 
+  // Use backend customerId if present, otherwise generate fallback prefixed with CUS
+  const generateCusId = (u) => {
+    if (!u) return "";
+    if (u.customerId) return String(u.customerId);
+    const raw = u.userId || u.id || u.email || "";
+    const s = String(raw);
+    const clean = s.length > 8 ? s.slice(-6) : s;
+    return `CUS${clean.toString().toUpperCase()}`;
+  };
+
   /* FILTER LOGIC */
   const filteredCustomers = customers.filter((u) => {
     const keyword = search.toLowerCase();
+    const cusId = generateCusId(u).toLowerCase();
 
     const matchesSearch =
       u.name.toLowerCase().includes(keyword) ||
       u.email.toLowerCase().includes(keyword) ||
-      u.phone.includes(keyword);
+      u.phone.includes(keyword) ||
+      cusId.includes(keyword);
 
     const matchesGender =
       genderFilter === "all" || 
@@ -83,6 +95,46 @@ const AdminCustomerProfile = () => {
 
     return matchesSearch && matchesGender;
   });
+
+  // Export filtered customers as CSV (Excel-compatible)
+  const exportCustomersToCSV = () => {
+    if (!filteredCustomers || filteredCustomers.length === 0) {
+      alert("No customers to export");
+      return;
+    }
+
+    const rows = filteredCustomers.map((c) => ({
+      CustomerId: generateCusId(c),
+      Name: c.name || "",
+      Email: c.email || "",
+      Phone: c.phone || "",
+      Gender: c.gender || "",
+      ProfileImage: c.profileImage || "",
+    }));
+
+    const header = Object.keys(rows[0]);
+    const csv = [
+      header.join(","),
+      ...rows.map((r) =>
+        header
+          .map((h) => {
+            const v = r[h] == null ? "" : String(r[h]);
+            return `"${v.replace(/"/g, '""')}"`;
+          })
+          .join(",")
+      ),
+    ].join("\r\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `customers_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -123,7 +175,15 @@ const AdminCustomerProfile = () => {
               />
             </div>
 
-            <select
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                onClick={exportCustomersToCSV}
+                className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
+              >
+                Export CSV
+              </button>
+
+              <select
               value={genderFilter}
               onChange={(e) => setGenderFilter(e.target.value)}
               className="px-3 py-2 rounded-lg border focus:ring-2 focus:ring-red-500"
@@ -132,6 +192,7 @@ const AdminCustomerProfile = () => {
               <option value="male">Male</option>
               <option value="female">Female</option>
             </select>
+            </div>
           </div>
 
           {/* GRID */}
@@ -183,9 +244,13 @@ const AdminCustomerProfile = () => {
                     {user.name}
                   </h3>
 
-                  <p className="text-center text-sm text-gray-500">
+                  <p className="text-center text-sm text-gray-500 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">
                     {user.email}
                   </p>
+
+                  <p className="text-center text-sm text-gray-500">{user.phone}</p>
+
+                  <p className="text-center text-xs text-gray-400 mt-2">Customer ID: {generateCusId(user)}</p>
 
                   <button
                     onClick={() => setSelectedCustomer(user)}
@@ -201,7 +266,7 @@ const AdminCustomerProfile = () => {
           {/* ================= PROFILE MODAL ================= */}
           {selectedCustomer && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-              <div className="bg-white max-w-md w-full rounded-2xl shadow-xl relative overflow-hidden">
+              <div className="bg-white max-w-md w-full rounded-2xl shadow-xl relative max-h-[90vh] overflow-y-auto">
                 <button
                   className="absolute top-4 right-4 text-gray-500 hover:text-red-600"
                   onClick={() => setSelectedCustomer(null)}
@@ -221,6 +286,7 @@ const AdminCustomerProfile = () => {
                 </div>
 
                 <div className="p-6 space-y-5">
+                  <Info label="Customer ID" value={generateCusId(selectedCustomer)} />
                   <Info label="Email" icon={Mail} value={selectedCustomer.email} />
                   <Info label="Mobile No." icon={Phone} value={selectedCustomer.phone} />
                   <Info label="Date of Birth" icon={Calendar} value={selectedCustomer.dob} />
