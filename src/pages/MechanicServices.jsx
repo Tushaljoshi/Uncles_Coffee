@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
+import { useToast } from "../hooks/useToast.js";
 import { X, Wrench, Car } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
 // New API Base URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;"https://machcnik.onrender.com/api/master";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://machcnik.onrender.com/api/master";
 
 const ListItem = ({ label }) => (
   <div className="flex items-center justify-between px-4 py-3 rounded-lg border bg-gray-50 hover:bg-gray-100 transition">
@@ -15,6 +16,7 @@ const ListItem = ({ label }) => (
 const SHOW_LIMIT = 4;
 
 const MechanicServices = () => {
+  const { toasts } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 

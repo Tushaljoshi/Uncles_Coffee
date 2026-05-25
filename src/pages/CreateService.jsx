@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo } from "react";
 import { Plus, Car, Wrench, X, Upload, Folder, Trash2, Edit2, Search, Filter, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
+import Toast from "../components/Toast.jsx";
+import { useToast } from "../hooks/useToast.js";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -11,6 +13,7 @@ const CreateService = () => {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { toasts, addToast } = useToast();
 
   // Dropdown state: card ID track karne ke liye
   const [expandedId, setExpandedId] = useState(null);
@@ -51,6 +54,10 @@ const CreateService = () => {
   const [fuelName, setFuelName] = useState("");
   const [editingFuelId, setEditingFuelId] = useState(null);
   const [fuelLoading, setFuelLoading] = useState(false);
+  const [engineCCList, setEngineCCList] = useState([]);
+  const [engineCCName, setEngineCCName] = useState("");
+  const [editingEngineCCId, setEditingEngineCCId] = useState(null);
+  const [engineCCLoading, setEngineCCLoading] = useState(false);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -155,7 +162,7 @@ const CreateService = () => {
       const data = await res.json();
       setBrandsList(Array.isArray(data) ? data : []);
     } catch (err) {
-      alert(err.message || "Failed to load brands");
+      addToast(err.message || "Failed to load brands", "error");
       setBrandsList([]);
     } finally {
       setBrandLoading(false);
@@ -187,12 +194,15 @@ const CreateService = () => {
     setFuelsList([]);
     setFuelName("");
     setEditingFuelId(null);
+    setEngineCCList([]);
+    setEngineCCName("");
+    setEditingEngineCCId(null);
     setShowBrandModal(false);
   };
 
   const handleCreateBrand = async () => {
-    if (!brandName?.trim()) return alert("Brand name is required");
-    if (!brandsVehicleId) return alert("Vehicle not selected");
+    if (!brandName?.trim()) return addToast("Brand name is required", "warning");
+    if (!brandsVehicleId) return addToast("Vehicle not selected", "warning");
     try {
       setBrandLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand`, {
@@ -202,19 +212,19 @@ const CreateService = () => {
       });
       if (!res.ok) throw new Error("Failed to create brand");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Brand created");
+      addToast(data.message || "Brand created", "success");
       setBrandName("");
       fetchBrands(brandsVehicleId);
     } catch (err) {
-      alert(err.message || "Create brand failed");
+      addToast(err.message || "Create brand failed", "error");
     } finally {
       setBrandLoading(false);
     }
   };
 
   const handleUpdateBrand = async () => {
-    if (!brandName?.trim()) return alert("Brand name is required");
-    if (!brandsVehicleId || !editingBrandIdLocal) return alert("Missing info");
+    if (!brandName?.trim()) return addToast("Brand name is required", "warning");
+    if (!brandsVehicleId || !editingBrandIdLocal) return addToast("Missing info", "warning");
     try {
       setBrandLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${editingBrandIdLocal}`, {
@@ -224,12 +234,12 @@ const CreateService = () => {
       });
       if (!res.ok) throw new Error("Failed to update brand");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Brand updated");
+      addToast(data.message || "Brand updated", "success");
       setBrandName("");
       setEditingBrandIdLocal(null);
       fetchBrands(brandsVehicleId);
     } catch (err) {
-      alert(err.message || "Update brand failed");
+      addToast(err.message || "Update brand failed", "error");
     } finally {
       setBrandLoading(false);
     }
@@ -244,7 +254,7 @@ const CreateService = () => {
       const data = await res.json();
       setModelsList(Array.isArray(data) ? data : data.data || []);
     } catch (err) {
-      alert(err.message || "Failed to load models");
+      addToast(err.message || "Failed to load models", "error");
       setModelsList([]);
     } finally {
       setModelLoading(false);
@@ -271,7 +281,7 @@ const CreateService = () => {
       const data = await res.json();
       setFuelsList(Array.isArray(data) ? data : data.data || []);
     } catch (err) {
-      alert(err.message || "Failed to load fuels");
+      addToast(err.message || "Failed to load fuels", "error");
       setFuelsList([]);
     } finally {
       setFuelLoading(false);
@@ -283,11 +293,12 @@ const CreateService = () => {
     setEditingFuelId(null);
     setFuelName("");
     fetchFuels(brandsVehicleId, selectedBrandId, modelId);
+    selectModelEngineCC(modelId);
   };
 
   const handleCreateModel = async () => {
-    if (!modelName?.trim()) return alert("Model name is required");
-    if (!brandsVehicleId || !selectedBrandId) return alert("Select a brand first");
+    if (!modelName?.trim()) return addToast("Model name is required", "warning");
+    if (!brandsVehicleId || !selectedBrandId) return addToast("Select a brand first", "warning");
     try {
       setModelLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model`, {
@@ -297,19 +308,19 @@ const CreateService = () => {
       });
       if (!res.ok) throw new Error("Failed to create model");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Model created");
+      addToast(data.message || "Model created", "success");
       setModelName("");
       fetchModels(brandsVehicleId, selectedBrandId);
     } catch (err) {
-      alert(err.message || "Create model failed");
+      addToast(err.message || "Create model failed", "error");
     } finally {
       setModelLoading(false);
     }
   };
 
   const handleUpdateModel = async () => {
-    if (!modelName?.trim()) return alert("Model name is required");
-    if (!brandsVehicleId || !selectedBrandId || !editingModelId) return alert("Missing model information");
+    if (!modelName?.trim()) return addToast("Model name is required", "warning");
+    if (!brandsVehicleId || !selectedBrandId || !editingModelId) return addToast("Missing model information", "warning");
     try {
       setModelLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${editingModelId}`, {
@@ -319,12 +330,12 @@ const CreateService = () => {
       });
       if (!res.ok) throw new Error("Failed to update model");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Model updated");
+      addToast(data.message || "Model updated", "success");
       setModelName("");
       setEditingModelId(null);
       fetchModels(brandsVehicleId, selectedBrandId);
     } catch (err) {
-      alert(err.message || "Update model failed");
+      addToast(err.message || "Update model failed", "error");
     } finally {
       setModelLoading(false);
     }
@@ -340,7 +351,7 @@ const CreateService = () => {
       });
       if (!res.ok) throw new Error("Failed to delete model");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Model deleted");
+      addToast(data.message || "Model deleted", "success");
       if (selectedModelId === modelId) {
         setSelectedModelId(null);
         setFuelsList([]);
@@ -349,15 +360,15 @@ const CreateService = () => {
       }
       fetchModels(brandsVehicleId, selectedBrandId);
     } catch (err) {
-      alert(err.message || "Delete model failed");
+      addToast(err.message || "Delete model failed", "error");
     } finally {
       setModelLoading(false);
     }
   };
 
   const handleCreateFuel = async () => {
-    if (!fuelName?.trim()) return alert("Fuel name is required");
-    if (!brandsVehicleId || !selectedBrandId || !selectedModelId) return alert("Select a model first");
+    if (!fuelName?.trim()) return addToast("Fuel name is required", "warning");
+    if (!brandsVehicleId || !selectedBrandId || !selectedModelId) return addToast("Select a model first", "warning");
     try {
       setFuelLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${selectedModelId}/fuel`, {
@@ -367,19 +378,19 @@ const CreateService = () => {
       });
       if (!res.ok) throw new Error("Failed to create fuel");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Fuel created");
+      addToast(data.message || "Fuel created", "success");
       setFuelName("");
       fetchFuels(brandsVehicleId, selectedBrandId, selectedModelId);
     } catch (err) {
-      alert(err.message || "Create fuel failed");
+      addToast(err.message || "Create fuel failed", "error");
     } finally {
       setFuelLoading(false);
     }
   };
 
   const handleUpdateFuel = async () => {
-    if (!fuelName?.trim()) return alert("Fuel name is required");
-    if (!brandsVehicleId || !selectedBrandId || !selectedModelId || !editingFuelId) return alert("Missing fuel information");
+    if (!fuelName?.trim()) return addToast("Fuel name is required", "warning");
+    if (!brandsVehicleId || !selectedBrandId || !selectedModelId || !editingFuelId) return addToast("Missing fuel information", "warning");
     try {
       setFuelLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${selectedModelId}/fuel/${editingFuelId}`, {
@@ -389,12 +400,12 @@ const CreateService = () => {
       });
       if (!res.ok) throw new Error("Failed to update fuel");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Fuel updated");
+      addToast(data.message || "Fuel updated", "success");
       setFuelName("");
       setEditingFuelId(null);
       fetchFuels(brandsVehicleId, selectedBrandId, selectedModelId);
     } catch (err) {
-      alert(err.message || "Update fuel failed");
+      addToast(err.message || "Update fuel failed", "error");
     } finally {
       setFuelLoading(false);
     }
@@ -410,12 +421,98 @@ const CreateService = () => {
       });
       if (!res.ok) throw new Error("Failed to delete fuel");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Fuel deleted");
+      addToast(data.message || "Fuel deleted", "success");
       fetchFuels(brandsVehicleId, selectedBrandId, selectedModelId);
     } catch (err) {
-      alert(err.message || "Delete fuel failed");
+      addToast(err.message || "Delete fuel failed", "error");
     } finally {
       setFuelLoading(false);
+    }
+  };
+
+  const fetchEngineCC = async (vehicleId, brandId, modelId) => {
+    if (!vehicleId || !brandId || !modelId) return;
+    setEngineCCLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand/${brandId}/model/${modelId}/engine-cc`);
+      if (!res.ok) throw new Error("Failed to fetch engine CCs");
+      const data = await res.json();
+      setEngineCCList(Array.isArray(data.data) ? data.data : []);
+    } catch (err) {
+      addToast(err.message || "Failed to load engine CCs", "error");
+      setEngineCCList([]);
+    } finally {
+      setEngineCCLoading(false);
+    }
+  };
+
+  const selectModelEngineCC = (modelId) => {
+    setEditingEngineCCId(null);
+    setEngineCCName("");
+    fetchEngineCC(brandsVehicleId, selectedBrandId, modelId);
+  };
+
+  const handleCreateEngineCC = async () => {
+    if (!engineCCName?.trim()) return addToast("Engine CC name is required", "warning");
+    if (!brandsVehicleId || !selectedBrandId || !selectedModelId) return addToast("Select a model first", "warning");
+    try {
+      setEngineCCLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${selectedModelId}/engine-cc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: engineCCName.trim() })
+      });
+      if (!res.ok) throw new Error("Failed to create engine CC");
+      const data = await res.json().catch(() => ({}));
+      addToast(data.message || "Engine CC created", "success");
+      setEngineCCName("");
+      fetchEngineCC(brandsVehicleId, selectedBrandId, selectedModelId);
+    } catch (err) {
+      addToast(err.message || "Create engine CC failed", "error");
+    } finally {
+      setEngineCCLoading(false);
+    }
+  };
+
+  const handleUpdateEngineCC = async () => {
+    if (!engineCCName?.trim()) return addToast("Engine CC name is required", "warning");
+    if (!brandsVehicleId || !selectedBrandId || !selectedModelId || !editingEngineCCId) return addToast("Missing engine CC information", "warning");
+    try {
+      setEngineCCLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${selectedModelId}/engine-cc/${editingEngineCCId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: engineCCName.trim() })
+      });
+      if (!res.ok) throw new Error("Failed to update engine CC");
+      const data = await res.json().catch(() => ({}));
+      addToast(data.message || "Engine CC updated", "success");
+      setEngineCCName("");
+      setEditingEngineCCId(null);
+      fetchEngineCC(brandsVehicleId, selectedBrandId, selectedModelId);
+    } catch (err) {
+      addToast(err.message || "Update engine CC failed", "error");
+    } finally {
+      setEngineCCLoading(false);
+    }
+  };
+
+  const handleDeleteEngineCC = async (engineCCId) => {
+    if (!brandsVehicleId || !selectedBrandId || !selectedModelId || !engineCCId) return;
+    if (!window.confirm("Delete this engine CC?")) return;
+    try {
+      setEngineCCLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${selectedBrandId}/model/${selectedModelId}/engine-cc/${engineCCId}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) throw new Error("Failed to delete engine CC");
+      const data = await res.json().catch(() => ({}));
+      addToast(data.message || "Engine CC deleted", "success");
+      fetchEngineCC(brandsVehicleId, selectedBrandId, selectedModelId);
+    } catch (err) {
+      addToast(err.message || "Delete engine CC failed", "error");
+    } finally {
+      setEngineCCLoading(false);
     }
   };
 
@@ -427,7 +524,7 @@ const CreateService = () => {
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${brandsVehicleId}/brand/${brandId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete brand");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Brand deleted");
+      addToast(data.message || "Brand deleted", "success");
       fetchBrands(brandsVehicleId);
       if (selectedBrandId === brandId) {
         setSelectedBrandId(null);
@@ -440,7 +537,7 @@ const CreateService = () => {
         setEditingFuelId(null);
       }
     } catch (err) {
-      alert(err.message || "Delete brand failed");
+      addToast(err.message || "Delete brand failed", "error");
     } finally {
       setBrandLoading(false);
     }
@@ -448,23 +545,23 @@ const CreateService = () => {
 
   const handleCreate = async () => {
     if (modalMode === "vehicle" || modalMode === "editVehicle") {
-      if (!categoryName?.trim()) return alert("Vehicle name is required");
-      if (modalMode === "vehicle" && !iconFile) return alert("Vehicle icon is required");
+      if (!categoryName?.trim()) return addToast("Vehicle name is required", "warning");
+      if (modalMode === "vehicle" && !iconFile) return addToast("Vehicle icon is required", "warning");
     } else if (modalMode === "editService") {
-      if (!itemName?.trim()) return alert("Name is required");
+      if (!itemName?.trim()) return addToast("Name is required", "warning");
     } else if (modalMode === "editType") {
-      if (!itemName?.trim()) return alert("Name is required");
-      if (!itemPrice) return alert("Price is required");
+      if (!itemName?.trim()) return addToast("Name is required", "warning");
+      if (!itemPrice) return addToast("Price is required", "warning");
     } else if (modalMode === "editEquipment") {
-      if (!itemName?.trim()) return alert("Name is required");
+      if (!itemName?.trim()) return addToast("Name is required", "warning");
     } else if (!itemName?.trim()) {
-      return alert("Name is required");
+      return addToast("Name is required", "warning");
     }
     if (modalMode === "service" && activeTab === "vehicle" && !selectedCategoryId) {
-      return alert("Please select a vehicle");
+      return addToast("Please select a vehicle", "warning");
     }
     if ((modalMode === "service" || modalMode === "type") && !iconFile) {
-      return alert("Icon/Image is required");
+      return addToast("Icon/Image is required", "warning");
     }
     try {
       setLoading(true);
@@ -588,7 +685,7 @@ const CreateService = () => {
         }
       }
     } catch (error) {
-      alert("Action failed.");
+      addToast("Action failed.", "error");
     } finally {
       setLoading(false);
     }
@@ -670,10 +767,10 @@ const CreateService = () => {
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete vehicle");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Vehicle deleted");
+      addToast(data.message || "Vehicle deleted", "success");
       fetchAllData();
     } catch (err) {
-      alert("Delete failed.");
+      addToast("Delete failed.", "error");
     } finally {
       setLoading(false);
     }
@@ -686,10 +783,10 @@ const CreateService = () => {
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/service/${serviceId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete service");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Service deleted");
+      addToast(data.message || "Service deleted", "success");
       fetchAllData();
     } catch (err) {
-      alert("Delete failed.");
+      addToast("Delete failed.", "error");
     } finally {
       setLoading(false);
     }
@@ -702,10 +799,10 @@ const CreateService = () => {
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/service/${serviceId}/type/${typeId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete service type");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Service type deleted");
+      addToast(data.message || "Service type deleted", "success");
       fetchAllData();
     } catch (err) {
-      alert("Delete failed.");
+      addToast("Delete failed.", "error");
     } finally {
       setLoading(false);
     }
@@ -718,10 +815,10 @@ const CreateService = () => {
       const res = await fetch(`${API_BASE_URL}/api/admin/equipment/${equipmentId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete equipment");
       const data = await res.json().catch(() => ({}));
-      alert(data.message || "Equipment deleted");
+      addToast(data.message || "Equipment deleted", "success");
       fetchAllData();
     } catch (err) {
-      alert("Delete failed.");
+      addToast("Delete failed.", "error");
     } finally {
       setLoading(false);
     }
@@ -729,6 +826,7 @@ const CreateService = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      <Toast toasts={toasts} />
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
       <div className={`flex-1 flex flex-col transition-all ${sidebarOpen ? "lg:ml-60" : "ml-0"}`}>
         <TopBar toggleSidebar={toggleSidebar} />
@@ -1339,6 +1437,67 @@ const CreateService = () => {
                                 onClick={() => handleDeleteFuel(f.id)}
                                 className="p-2 rounded hover:bg-gray-100"
                                 title="Delete Fuel"
+                              >
+                                <Trash2 size={16} className="text-gray-600" />
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedModelId && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="font-semibold">Engine CC for {modelsList.find((m) => m.id === selectedModelId)?.name || "Selected Model"}</h4>
+                      <p className="text-sm text-gray-500">Create or manage engine cubic capacities.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="flex-1 border p-2 rounded-lg"
+                        value={engineCCName}
+                        onChange={(e) => setEngineCCName(e.target.value)}
+                        placeholder="e.g. 500 CC"
+                      />
+                      {editingEngineCCId ? (
+                        <button onClick={handleUpdateEngineCC} disabled={engineCCLoading} className="bg-yellow-500 text-white px-4 py-2 rounded-lg">{engineCCLoading ? 'Updating...' : 'Update'}</button>
+                      ) : (
+                        <button onClick={handleCreateEngineCC} disabled={engineCCLoading} className="bg-red-600 text-white px-4 py-2 rounded-lg">{engineCCLoading ? 'Creating...' : 'Create'}</button>
+                      )}
+                    </div>
+
+                    {engineCCLoading && engineCCList.length === 0 ? (
+                      <p className="text-sm text-gray-500">Loading engine CCs...</p>
+                    ) : engineCCList.length === 0 ? (
+                      <p className="text-sm text-gray-400">No engine CCs yet for this model.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {engineCCList.map((e) => (
+                          <li key={e.id} className="flex items-center justify-between border p-2 rounded-lg">
+                            <span className="text-gray-700">{e.name}</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingEngineCCId(e.id);
+                                  setEngineCCName(e.name || "");
+                                }}
+                                className="p-2 rounded hover:bg-gray-100"
+                                title="Edit Engine CC"
+                              >
+                                <Edit2 size={16} className="text-gray-600" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteEngineCC(e.id)}
+                                className="p-2 rounded hover:bg-gray-100"
+                                title="Delete Engine CC"
                               >
                                 <Trash2 size={16} className="text-gray-600" />
                               </button>

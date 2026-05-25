@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
+import { useToast } from "../hooks/useToast.js";
 import { RefreshCw, Trash2, X, Send, Video } from "lucide-react";
 
 // ── Star Rating ──────────────────────────────────────────
@@ -63,6 +64,7 @@ const Skeleton = () => (
 
 // ── Main ─────────────────────────────────────────────────
 const AddReview = () => {
+  const { toasts } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const toggleSidebar = () => setSidebarOpen((p) => !p);
 

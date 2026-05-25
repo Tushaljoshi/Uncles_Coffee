@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
+import { useToast } from "../hooks/useToast.js";
+
 import { RefreshCw, ImageIcon, Trash2, X, UploadCloud } from "lucide-react";
 
 const BannerSkeleton = () => (
-  <div className="rounded-2xl overflow-hidden animate-pulse bg-white border border-gray-100">
-    <div className="h-40 bg-gray-100 w-full" />
-  </div>
+  <div className="rounded-2xl overflow-hidden animate-pulse bg-white border border-gray-100" style={{ aspectRatio: "1080 / 350" }} />
 );
 
 const Toast = ({ popup, onClose }) => {
@@ -26,6 +26,7 @@ const Toast = ({ popup, onClose }) => {
 };
 
 const AddBanner = () => {
+  const { toasts } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const toggleSidebar = () => setSidebarOpen((p) => !p);
 
@@ -41,6 +42,27 @@ const AddBanner = () => {
 
   const fileInputRef = useRef(null);
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
+
+  const REQUIRED_BANNER_WIDTH = 1080;
+  const REQUIRED_BANNER_HEIGHT = 341;
+  const REQUIRED_SIZE_STRING = `${REQUIRED_BANNER_WIDTH}×${REQUIRED_BANNER_HEIGHT}`;
+
+  const validateImageDimensions = (selected) => {
+    return new Promise((resolve) => {
+      if (!selected) return resolve(false);
+      const url = URL.createObjectURL(selected);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img.width === REQUIRED_BANNER_WIDTH && img.height === REQUIRED_BANNER_HEIGHT);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(false);
+      };
+      img.src = url;
+    });
+  };
 
   const [popup, setPopup] = useState({ open: false, type: "success", message: "" });
 
@@ -68,8 +90,13 @@ const AddBanner = () => {
   useEffect(() => { fetchBanners(); }, []);
 
   // ── FILE HANDLING ─────────────────────────────────────
-  const applyFile = (selected) => {
+  const applyFile = async (selected) => {
     if (!selected) return;
+    const isValid = await validateImageDimensions(selected);
+    if (!isValid) {
+      showPopup("error", `Image must be ${REQUIRED_SIZE_STRING} pixels`);
+      return;
+    }
     setFile(selected);
     setPreview(URL.createObjectURL(selected));
   };
@@ -85,6 +112,7 @@ const AddBanner = () => {
 
   const clearFile = () => {
     setFile(null);
+    if (preview) URL.revokeObjectURL(preview);
     setPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -190,15 +218,17 @@ const AddBanner = () => {
                   Drop image here or{" "}
                   <span className="text-red-600 underline underline-offset-2">browse</span>
                 </p>
-                <p className="text-xs text-gray-400 mt-1">PNG, JPG, WEBP up to 5 MB</p>
+                <p className="text-xs font-bold text-gray-800 mt-1">
+                  PNG, JPG, WEBP up to 5 MB · required size: {REQUIRED_SIZE_STRING}px
+                </p>
               </>
             ) : (
               <div className="flex flex-col items-center gap-4">
-                <div className="relative inline-block">
+                <div className="relative inline-block w-full max-w-xl rounded-xl border border-gray-100 shadow-sm" style={{ aspectRatio: "1080 / 350" }}>
                   <img
                     src={preview}
                     alt="Preview"
-                    className="h-44 max-w-xs rounded-xl border border-gray-100 object-cover shadow-sm"
+                    className="h-full w-full rounded-xl object-cover"
                   />
                   <button
                     onClick={(e) => { e.stopPropagation(); clearFile(); }}
@@ -250,11 +280,12 @@ const AddBanner = () => {
                 <div
                   key={banner.id}
                   className="group relative bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-gray-200 hover:shadow-md transition-all"
+                  style={{ aspectRatio: "1080 / 350" }}
                 >
                   <img
                     src={banner.images.singleImage}
                     alt="Banner"
-                    className="h-40 w-full object-cover"
+                    className="h-full w-full object-cover"
                   />
 
                   {/* New badge */}

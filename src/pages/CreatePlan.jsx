@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
+import Toast from "../components/Toast.jsx";
+import { useToast } from "../hooks/useToast.js";
 
 /* ================= PLAN SKELETON ================= */
 
@@ -13,6 +15,7 @@ const PlanSkeleton = () => (
 );
 
 const SubscriptionPlans = () => {
+  const { toasts } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -158,6 +161,7 @@ const SubscriptionPlans = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      <Toast toasts={toasts} />
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
 
       {sidebarOpen && (

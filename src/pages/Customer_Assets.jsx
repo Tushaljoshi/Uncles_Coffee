@@ -24,8 +24,7 @@ const ListItem = ({ label, id, onDelete, isDeleting }) => (
 
 const SHOW_LIMIT = 4;
 
-const CustomerAssets = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
+const CustomerAssets = () => {  const { toasts } = useToast();  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
   const [showModal, setShowModal] = useState(false);
