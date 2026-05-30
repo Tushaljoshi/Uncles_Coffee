@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import LoginForm from "./components/LoginForm";
 import MechanicServices from "./pages/MechanicServices";
 import AddBanner from "./pages/AddBanner";
+import EmergencyIssue from "./pages/EmergencyIssue";
 import Service from "./pages/CreateService";
 import Profile from "./pages/CustomerProfile"
 import MechanicProfile from "./pages/MechanicProfile"
@@ -12,6 +13,7 @@ import Plan from "./pages/CreatePlan"
 import CustomerAssets from "./pages/Customer_Assets";
 import AddReview from "./pages/AddReview";
 import CustomerBooking from "./pages/CustomerBooking";
+import JobPart from "./pages/JobPart";
 
 function App() {
   return (
@@ -20,12 +22,14 @@ function App() {
         <Route path="/" element={<LoginForm />} />
         <Route path="/mechanicaservices" element={<MechanicServices />} />
         <Route path="/add-banner" element={<AddBanner/>} />
+        <Route path="/visible-issues" element={<EmergencyIssue/>} />
         <Route path="/service" element={<Service/>} />
         <Route path="/customer-profile" element={<Profile/>} />
         <Route path="/mechanic-profile" element={<MechanicProfile/>} />
         <Route path="/help" element={<HelpSupport/>} />
         <Route path="/dispute" element={<Dispute/>} />
         <Route path="/plan" element={<Plan/>} />
+        <Route path="/job-part" element={<JobPart/>} />
         <Route path="/assests" element={<CustomerAssets/>} />
         <Route path="/add-review" element={<AddReview/>} />
         <Route path="/customer-booking" element={<CustomerBooking/>} />

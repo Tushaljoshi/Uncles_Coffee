@@ -51,6 +51,11 @@ const TopBar = ({ toggleSidebar }) => {
       subtitle: "Add and configure new services available on the platform",
     },
 
+    "/job-part": {
+      title: "Job Parts",
+      subtitle: "Create and manage job parts for each vehicle type",
+    },
+
     "/help": {
       title: "Support Tickets",
       subtitle: "Track, respond to, and resolve customer support requests",

@@ -8,7 +8,8 @@ import {
   UserCircle2Icon,
   BugIcon,
   HelpCircleIcon,
-  ScanEyeIcon
+  ScanEyeIcon,
+  Wrench
 
 } from "lucide-react";
 
@@ -22,17 +23,19 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       section: "Main Menu",
       items: [
         { label: "Customer Profiles", icon: UserCircle, path: "/customer-profile" },
-        { label: "Mechanik Profiles", icon: UserCircle2Icon, path: "/mechanic-profile" },
+        { label: "Mechanic Profiles", icon: UserCircle2Icon, path: "/mechanic-profile" },
       ],
     },
     {
       section: "Management",
       items: [
-        { label: "Add Media", icon: ImageIcon, path: "/add-banner" },
+        { label: "Add Banner", icon: ImageIcon, path: "/add-banner" },
         { label: "Add Review", icon: ScanEyeIcon, path: "/add-review" },
         { label: "Create Services", icon: CarFrontIcon, path: "/service" },
+        { label: "Job Required Parts", icon: Wrench, path: "/job-part" },
+        { label: "SOS Vehicle Issues", icon: ScanEyeIcon, path: "/visible-issues" },
         { label: "Create Plan", icon: CoinsIcon, path: "/plan" },
-        { label: "Mechanica Services", icon: PackageOpenIcon, path: "/mechanicaservices" },
+        { label: "Mechanic Services", icon: PackageOpenIcon, path: "/mechanicaservices" },
         { label: "Customer Bookings", icon: PackageOpenIcon, path: "/customer-booking" },
       ],
     },
