@@ -12,8 +12,6 @@ import {
   Wrench
 
 } from "lucide-react";
-
-
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,7 +34,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         { label: "SOS Vehicle Issues", icon: ScanEyeIcon, path: "/visible-issues" },
         { label: "Create Plan", icon: CoinsIcon, path: "/plan" },
         { label: "Mechanic Services", icon: PackageOpenIcon, path: "/mechanicaservices" },
-        { label: "Customer Bookings", icon: PackageOpenIcon, path: "/customer-booking" },
+        { label: "Landing Bookings", icon: PackageOpenIcon, path: "/customer-booking" },
       ],
     },
     {

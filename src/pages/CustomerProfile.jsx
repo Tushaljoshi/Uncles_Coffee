@@ -34,6 +34,7 @@ const AdminCustomerProfile = () => {
 
   const [search, setSearch] = useState("");
   const [genderFilter, setGenderFilter] = useState("all");
+  const [viewMode, setViewMode] = useState("grid");
 
   /* FETCH CUSTOMERS FROM API */
   useEffect(() => {
@@ -176,6 +177,21 @@ const AdminCustomerProfile = () => {
             </div>
 
             <div className="flex items-center gap-2 justify-end">
+              <div className="flex items-center gap-2 mr-2">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={"px-3 py-2 rounded-lg text-sm " + (viewMode === 'grid' ? 'bg-red-600 text-white' : 'bg-gray-100')}
+                >
+                  Grid
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={"px-3 py-2 rounded-lg text-sm " + (viewMode === 'table' ? 'bg-red-600 text-white' : 'bg-gray-100')}
+                >
+                  Table
+                </button>
+              </div>
+
               <button
                 onClick={exportCustomersToCSV}
                 className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
@@ -195,73 +211,117 @@ const AdminCustomerProfile = () => {
             </div>
           </div>
 
-          {/* GRID */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {loading ? (
-              [...Array(8)].map((_, i) => <CustomerSkeleton key={i} />)
-            ) : filteredCustomers.length === 0 ? (
-              <div className="col-span-full flex flex-col items-center justify-center py-24 text-center">
-                <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-4">
-                  <Users size={32} className="text-red-600" />
-                </div>
-
-                <p className="text-lg font-semibold text-gray-800">
-                  No Customers Found
-                </p>
-
-                <p className="text-sm text-gray-500 mt-1 max-w-sm">
-                  We couldn’t find any customers matching your search or filter criteria.
-                  Try adjusting your filters or search keywords.
-                </p>
-
-                <button
-                  onClick={() => {
-                    setSearch("");
-                    setGenderFilter("all");
-                  }}
-                  className="mt-5 px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700
-               text-white text-sm font-medium transition"
-                >
-                  Clear Filters
-                </button>
-              </div>
-
-            ) : (
-              filteredCustomers.map((user) => (
-                <div
-                  key={user.userId}
-                  className="bg-white rounded-2xl shadow-sm border p-5"
-                >
-                  <div className="flex justify-center">
-                    <img
-                      src={user.profileImage}
-                      className="w-24 h-24 rounded-full object-cover border"
-                      alt="profile"
-                    />
+          {/* GRID OR TABLE */}
+          {viewMode === "grid" ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {loading ? (
+                [...Array(8)].map((_, i) => <CustomerSkeleton key={i} />)
+              ) : filteredCustomers.length === 0 ? (
+                <div className="col-span-full flex flex-col items-center justify-center py-24 text-center">
+                  <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                    <Users size={32} className="text-red-600" />
                   </div>
 
-                  <h3 className="text-center font-semibold text-gray-800 mt-3">
-                    {user.name}
-                  </h3>
-
-                  <p className="text-center text-sm text-gray-500 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">
-                    {user.email}
+                  <p className="text-lg font-semibold text-gray-800">
+                    No Customers Found
                   </p>
 
-                  <p className="text-center text-sm text-gray-500">{user.phone}</p>
-
-                  <p className="text-center text-xs text-gray-400 mt-2">Customer ID: {generateCusId(user)}</p>
+                  <p className="text-sm text-gray-500 mt-1 max-w-sm">
+                    We couldn’t find any customers matching your search or filter criteria.
+                    Try adjusting your filters or search keywords.
+                  </p>
 
                   <button
-                    onClick={() => setSelectedCustomer(user)}
-                    className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-medium"
+                    onClick={() => {
+                      setSearch("");
+                      setGenderFilter("all");
+                    }}
+                    className="mt-5 px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700
+                 text-white text-sm font-medium transition"
                   >
-                    View Profile
+                    Clear Filters
                   </button>
                 </div>
-              ))
-            )}
-          </div>
+
+              ) : (
+                filteredCustomers.map((user) => (
+                  <div
+                    key={user.userId || user.email || user.id}
+                    className="bg-white rounded-2xl shadow-sm border p-5"
+                  >
+                    <div className="flex justify-center">
+                      <img
+                        src={user.profileImage}
+                        className="w-24 h-24 rounded-full object-cover border"
+                        alt="profile"
+                      />
+                    </div>
+
+                    <h3 className="text-center font-semibold text-gray-800 mt-3">
+                      {user.name}
+                    </h3>
+
+                    <p className="text-center text-sm text-gray-500 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">
+                      {user.email}
+                    </p>
+
+                    <p className="text-center text-sm text-gray-500">{user.phone}</p>
+
+                    <p className="text-center text-xs text-gray-400 mt-2">Customer ID: {generateCusId(user)}</p>
+
+                    <button
+                      onClick={() => setSelectedCustomer(user)}
+                      className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-medium"
+                    >
+                      View Profile
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <div className="bg-white p-4 rounded-xl shadow-sm border">
+              <div className="overflow-x-auto">
+                {loading ? (
+                  <div className="py-8 text-center text-gray-500">Loading...</div>
+                ) : filteredCustomers.length === 0 ? (
+                  <div className="py-8 text-center text-gray-500">No customers to display</div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Customer ID</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Name</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Email</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Phone</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Gender</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {filteredCustomers.map((user) => (
+                        <tr key={user.userId || user.email || user.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-700">{generateCusId(user)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{user.name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{user.email}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{user.phone}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{user.gender}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            <button
+                              onClick={() => setSelectedCustomer(user)}
+                              className="px-3 py-1 rounded-lg bg-red-600 text-white text-sm"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* ================= PROFILE MODAL ================= */}
           {selectedCustomer && (

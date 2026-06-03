@@ -26,6 +26,8 @@ const AdminMechanicProfile = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [mechanics, setMechanics] = useState([]);
+  const [viewMode, setViewMode] = useState("grid");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -120,17 +122,72 @@ const AdminMechanicProfile = () => {
     }
   };
 
+  // Export filtered mechanics to CSV
+  const exportMechanicsToCSV = () => {
+    if (!filteredMechanics || filteredMechanics.length === 0) {
+      alert('No mechanics to export');
+      return;
+    }
+
+    const rows = filteredMechanics.map(m => ({
+      MechanicId: m.mechanicId || m.kyc?.mechanicId || m.id || '',
+      Name: m.name || m.fullName || '',
+      Email: m.email || '',
+      Phone: m.phone || '',
+      Status: m.status || '',
+      GarageName: m.garage?.name || '',
+      City: m.garage?.city || '',
+      State: m.garage?.state || '',
+      PinCode: m.garage?.pin || '',
+      Address: m.garage?.address || '',
+      hasToolKit: m.hasToolKit ? 'Yes' : 'No',
+      hasVehicle: m.hasVehicle ? 'Yes' : 'No',
+      hasGarage: m.hasGarage ? 'Yes' : 'No',
+      Skills: m.skills ? [
+        ...(m.skills.services || []).map(s => `Service: ${s}`),
+        ...(m.skills.expertise || []).map(e => `Expertise: ${e}`),
+      ].join(', ') : '',
+      vehiclesHandled: m.skills?.vehicles ? m.skills.vehicles.join(', ') : '',
+      equipment: m.skills?.equipment ? m.skills.equipment.join(', ') : '',
+      KYC_Aadhaar: m.kyc?.aadhaarNumber || '',
+      KYC_PAN: m.kyc?.panNumber || '',
+      KYC_DrivingLicense: m.kyc?.drivingLicenseNumber || '',
+      BankName: m.bank?.bankName || '',
+      AccountNumber: m.bank?.accountNumber || '',
+      IFSC: m.bank?.ifsc || '',
+    }));
+
+    const header = Object.keys(rows[0]);
+    const csv = [
+      header.join(','),
+      ...rows.map(r => header.map(h => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(','))
+    ].join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mechanics_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const filteredMechanics = mechanics.filter(m => {
     const mechanicId = (m.mechanicId || m.kyc?.mechanicId || m.id || "").toString().toLowerCase();
     const keyword = search.toLowerCase();
     const name = (m.name || m.fullName || "").toString().toLowerCase();
     const phone = (m.phone || "").toString();
-
-    return (
+    const matchesSearch = (
       name.includes(keyword) ||
       phone.includes(keyword) ||
       mechanicId.includes(keyword)
     );
+
+    const matchesStatus = statusFilter === 'all' || (m.status && m.status.toLowerCase() === statusFilter.toLowerCase());
+
+    return matchesSearch && matchesStatus;
   });
 
   return (
@@ -159,34 +216,115 @@ const AdminMechanicProfile = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {loading ? (
-              [...Array(8)].map((_, i) => <MechanicSkeleton key={i} />)
-            ) : filteredMechanics.map((m) => (
-              <div key={m.id} className="group bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl transition-all duration-300 relative overflow-hidden">
-                <div className={`absolute top-0 right-0 h-1.5 w-full ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={"px-3 py-2 rounded-lg text-sm " + (viewMode === 'grid' ? 'bg-slate-900 text-white' : 'bg-gray-100')}
+              >
+                Grid
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={"px-3 py-2 rounded-lg text-sm " + (viewMode === 'table' ? 'bg-slate-900 text-white' : 'bg-gray-100')}
+              >
+                Table
+              </button>
+            </div>
 
-                <div className="flex flex-col items-center">
-                  <div className="relative mt-2">
-                    <img src={m.profilePhoto || 'https://via.placeholder.com/150'} className="w-20 h-20 rounded-full object-cover border-4 border-slate-50 shadow-sm" alt={m.name} />
-                    <span className={`absolute bottom-0 right-0 w-5 h-5 rounded-full border-2 border-white ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
-                  </div>
-                  <h3 className="mt-4 font-bold text-slate-800 text-lg line-clamp-1">{m.name}</h3>
-                  <div className="flex items-center text-slate-500 text-sm gap-1 mb-4">
-                    <MapPin size={14} /> {m.garage?.city || "Unknown"}
-                  </div>
-                  <p className="text-slate-400 text-xs mb-4">Mechanic ID: {m.mechanicId || m.kyc?.mechanicId || m.id || 'N/A'}</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => exportMechanicsToCSV()}
+                className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
+              >
+                Export CSV
+              </button>
 
-                  <button
-                    onClick={() => fetchSingleMechanic(m.id)}
-                    className="w-full py-2.5 px-4 bg-slate-900 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
-                  >
-                    View Details
-                  </button>
-                </div>
-              </div>
-            ))}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
           </div>
+
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {loading ? (
+                [...Array(8)].map((_, i) => <MechanicSkeleton key={i} />)
+              ) : filteredMechanics.map((m) => (
+                <div key={m.id || m.email || m.mechanicId} className="group bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl transition-all duration-300 relative overflow-hidden">
+                  <div className={`absolute top-0 right-0 h-1.5 w-full ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
+
+                  <div className="flex flex-col items-center">
+                    <div className="relative mt-2">
+                      <img src={m.profilePhoto || 'https://via.placeholder.com/150'} className="w-20 h-20 rounded-full object-cover border-4 border-slate-50 shadow-sm" alt={m.name} />
+                      <span className={`absolute bottom-0 right-0 w-5 h-5 rounded-full border-2 border-white ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
+                    </div>
+                    <h3 className="mt-4 font-bold text-slate-800 text-lg line-clamp-1">{m.name}</h3>
+                    <div className="flex items-center text-slate-500 text-sm gap-1 mb-4">
+                      <MapPin size={14} /> {m.garage?.city || "Unknown"}
+                    </div>
+                    <p className="text-slate-400 text-xs mb-4">Mechanic ID: {m.mechanicId || m.kyc?.mechanicId || m.id || 'N/A'}</p>
+
+                    <button
+                      onClick={() => fetchSingleMechanic(m.id)}
+                      className="w-full py-2.5 px-4 bg-slate-900 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white p-4 rounded-xl shadow-sm border">
+              <div className="overflow-x-auto">
+                {loading ? (
+                  <div className="py-8 text-center text-gray-500">Loading...</div>
+                ) : filteredMechanics.length === 0 ? (
+                  <div className="py-8 text-center text-gray-500">No mechanics to display</div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Mechanic ID</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Name</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Email</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Phone</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {filteredMechanics.map((m) => (
+                        <tr key={m.id || m.email || m.mechanicId} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-700">{m.mechanicId || m.kyc?.mechanicId || m.id || ''}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{m.name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{m.email}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{m.phone}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{m.status}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            <button
+                              onClick={() => fetchSingleMechanic(m.id)}
+                              className="px-3 py-1 rounded-lg bg-slate-900 text-white text-sm"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
 
           {selectedMechanic && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -245,12 +383,14 @@ const AdminMechanicProfile = () => {
                           <div className="p-5 bg-red-50 rounded-2xl border border-red-100 border-l-4 border-l-red-500">
                             <p className="text-[10px] font-bold text-red-400 uppercase mb-2">Status</p>
                             <p className="text-red-700 font-semibold text-sm">Suspended</p>
+                            <p className="text-sm italic text-red-600 mt-2">Reason: {selectedMechanic.adminRemark || selectedMechanic.reason || selectedMechanic.suspensionReason || 'No reason provided'}</p>
                             <p className="text-[10px] text-red-400 mt-4">Suspended On: {selectedMechanic.updatedAt ? new Date(selectedMechanic.updatedAt).toLocaleString() : 'N/A'}</p>
                           </div>
                         ) : selectedMechanic.status === 'rejected' ? (
                           <div className="p-5 bg-red-50 rounded-2xl border border-red-100 border-l-4 border-l-red-500">
                             <p className="text-[10px] font-bold text-red-400 uppercase mb-2">Status</p>
                             <p className="text-red-700 font-semibold text-sm">Rejected</p>
+                            <p className="text-sm italic text-red-600 mt-2">Reason: {selectedMechanic.adminRemark || selectedMechanic.remark || selectedMechanic.rejectionReason || 'No reason provided'}</p>
                             <p className="text-[10px] text-red-400 mt-4">Last Reviewed: {selectedMechanic.reviewedAt ? new Date(selectedMechanic.reviewedAt).toLocaleString() : 'N/A'}</p>
                           </div>
                         ) : (
