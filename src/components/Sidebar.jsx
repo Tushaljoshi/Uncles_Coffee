@@ -9,7 +9,8 @@ import {
   BugIcon,
   HelpCircleIcon,
   ScanEyeIcon,
-  Wrench
+  Wrench,
+  Ticket,
 
 } from "lucide-react";
 const Sidebar = ({ isOpen, toggleSidebar }) => {
@@ -35,6 +36,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         { label: "Create Plan", icon: CoinsIcon, path: "/plan" },
         { label: "Mechanic Services", icon: PackageOpenIcon, path: "/mechanicaservices" },
         { label: "Landing Bookings", icon: PackageOpenIcon, path: "/customer-booking" },
+        { label: "Service Tickets", icon: Ticket, path: "/service-tickets" },
       ],
     },
     {

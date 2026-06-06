@@ -14,6 +14,7 @@ import CustomerAssets from "./pages/Customer_Assets";
 import AddReview from "./pages/AddReview";
 import CustomerBooking from "./pages/CustomerBooking";
 import JobPart from "./pages/JobPart";
+import ServiceTickets from "./pages/ServiceTickets";
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
         <Route path="/assests" element={<CustomerAssets/>} />
         <Route path="/add-review" element={<AddReview/>} />
         <Route path="/customer-booking" element={<CustomerBooking/>} />
+        <Route path="/service-tickets" element={<ServiceTickets/>} />
       </Routes>
     </Router>
   );
