@@ -207,12 +207,12 @@ const getEstimatedCost = (booking) => {
 };
 
 const SectionCard = ({ title, icon: Icon, children, className = "" }) => (
-  <div className={`bg-white border border-gray-200 rounded-xl overflow-hidden ${className}`}>
-    <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+  <div className={`bg-white border border-gray-200 rounded-lg sm:rounded-xl overflow-hidden ${className}`}>
+    <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
       {Icon && <Icon size={16} className="text-red-600 flex-shrink-0" />}
-      <h4 className="text-sm font-bold text-gray-800">{title}</h4>
+      <h4 className="text-xs sm:text-sm font-bold text-gray-800 truncate">{title}</h4>
     </div>
-    <div className="p-4">{children}</div>
+    <div className="p-3 sm:p-4">{children}</div>
   </div>
 );
 
@@ -220,12 +220,12 @@ const InfoGrid = ({ items }) => {
   const visible = items.filter((item) => item.show !== false);
   if (visible.length === 0) return null;
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 sm:gap-x-6 gap-y-3 sm:gap-y-4">
       {visible.map(({ label, value, fullWidth, mono }) => (
-        <div key={label} className={fullWidth ? "sm:col-span-2" : ""}>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+        <div key={label} className={fullWidth ? "sm:col-span-2 lg:col-span-3" : ""}>
+          <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
           <p
-            className={`text-sm text-gray-900 break-words ${mono ? "font-mono text-xs bg-gray-50 px-2 py-1 rounded" : ""} ${
+            className={`text-sm sm:text-base text-gray-900 break-words ${mono ? "font-mono text-xs sm:text-sm bg-gray-50 px-2 py-1 rounded" : ""} ${
               value === EMPTY ? "text-gray-400 italic" : "font-medium"
             }`}
           >
@@ -247,35 +247,35 @@ const PersonCard = ({ title, name, phone, image, id, icon: Icon }) => {
   const displayName = hasValue(name) ? name : title === "Customer" ? "Customer (name not set)" : EMPTY;
   const phoneFormatted = formatPhone(phone);
   return (
-    <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-200 shadow-sm">
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-        <div className="w-7 h-7 rounded-lg bg-red-100 flex items-center justify-center">
-          <Icon size={14} className="text-red-600" />
+    <div className="bg-gradient-to-br from-gray-50 to-white rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200 shadow-sm">
+      <div className="flex items-center gap-2 mb-2 sm:mb-3 pb-2 border-b border-gray-100">
+        <div className="w-6 sm:w-7 h-6 sm:h-7 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+          <Icon size={13} className="text-red-600" />
         </div>
-        <h4 className="text-sm font-bold text-gray-800">{title}</h4>
+        <h4 className="text-xs sm:text-sm font-bold text-gray-800 truncate">{title}</h4>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         {hasValue(image) ? (
-          <img src={image} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-white shadow" />
+          <img src={image} alt="" className="w-12 sm:w-14 h-12 sm:h-14 rounded-full object-cover border-2 border-white shadow flex-shrink-0" />
         ) : (
-          <div className="w-14 h-14 rounded-full bg-gray-200 flex items-center justify-center border-2 border-white">
-            <Icon size={22} className="text-gray-400" />
+          <div className="w-12 sm:w-14 h-12 sm:h-14 rounded-full bg-gray-200 flex items-center justify-center border-2 border-white flex-shrink-0">
+            <Icon size={20} className="text-gray-400" />
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="font-bold text-gray-900 text-base leading-tight">{displayName}</p>
+          <p className="font-bold text-gray-900 text-sm sm:text-base leading-tight line-clamp-2">{displayName}</p>
           {phoneFormatted !== EMPTY ? (
             <a
               href={`tel:${String(phone).replace(/\D/g, "")}`}
-              className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1.5 mt-1 font-medium"
+              className="text-xs sm:text-sm text-red-600 hover:text-red-700 flex items-center gap-1 mt-1 font-medium truncate"
             >
-              <Phone size={14} /> {phoneFormatted}
+              <Phone size={12} className="flex-shrink-0" /> <span className="truncate">{phoneFormatted}</span>
             </a>
           ) : (
-            <p className="text-xs text-gray-400 italic mt-1">Phone not available</p>
+            <p className="text-[11px] sm:text-xs text-gray-400 italic mt-1">Phone not available</p>
           )}
           {hasValue(id) && (
-            <p className="text-[10px] text-gray-500 mt-1.5 font-mono bg-gray-100 px-2 py-0.5 rounded inline-block truncate max-w-full">
+            <p className="text-[8px] sm:text-[10px] text-gray-500 mt-1 font-mono bg-gray-100 px-1.5 py-0.5 rounded inline-block truncate max-w-full">
               {id}
             </p>
           )}
@@ -334,20 +334,20 @@ const TicketDetailModal = ({ booking, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="bg-gray-50 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-3xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col">
+      <div className="bg-gray-50 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b bg-white flex items-start justify-between gap-3 flex-shrink-0">
+        <div className="p-3 sm:p-4 md:p-5 border-b bg-white flex items-start justify-between gap-3 flex-shrink-0">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Booking ID</p>
+            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Booking ID</p>
             <button
               type="button"
               onClick={copyBookingId}
               title="Click to copy"
-              className="text-xs font-mono text-gray-700 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded mt-0.5 break-all text-left w-full max-w-full"
+              className="text-[11px] sm:text-xs font-mono text-gray-700 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded mt-0.5 break-all text-left w-full max-w-full"
             >
               {booking.bookingId}
             </button>
-            <h2 className="text-lg font-bold text-gray-900 mt-2">Service Ticket</h2>
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 mt-2">Service Ticket</h2>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <StatusBadge status={booking.status} />
               <span
@@ -357,33 +357,33 @@ const TicketDetailModal = ({ booking, onClose }) => {
               </span>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full flex-shrink-0 border">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full flex-shrink-0 border touch-target" aria-label="Close modal">
             <X size={20} className="text-gray-600" />
           </button>
         </div>
 
         {/* Quick summary */}
-        <div className="px-4 sm:px-5 py-3 bg-white border-b grid grid-cols-2 sm:grid-cols-4 gap-3 flex-shrink-0">
-          <div>
-            <p className="text-[10px] text-gray-400 uppercase font-semibold">Estimated</p>
-            <p className="text-sm font-bold text-red-600">{getEstimatedCost(booking)}</p>
+        <div className="px-3 sm:px-4 md:px-5 py-2.5 sm:py-3 bg-white border-b grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 flex-shrink-0">
+          <div className="min-w-0">
+            <p className="text-[8px] sm:text-[10px] text-gray-400 uppercase font-semibold">Estimated</p>
+            <p className="text-xs sm:text-sm font-bold text-red-600">{getEstimatedCost(booking)}</p>
           </div>
-          <div>
-            <p className="text-[10px] text-gray-400 uppercase font-semibold">Scheduled</p>
-            <p className="text-xs font-semibold text-gray-800">{formatBookingDate(booking.bookingDate)}</p>
+          <div className="min-w-0">
+            <p className="text-[8px] sm:text-[10px] text-gray-400 uppercase font-semibold">Scheduled</p>
+            <p className="text-[11px] sm:text-xs font-semibold text-gray-800 line-clamp-2">{formatBookingDate(booking.bookingDate)}</p>
           </div>
-          <div>
-            <p className="text-[10px] text-gray-400 uppercase font-semibold">Vehicle</p>
-            <p className="text-xs font-semibold text-gray-800 truncate">{vehicle.registrationNumber || EMPTY}</p>
+          <div className="min-w-0">
+            <p className="text-[8px] sm:text-[10px] text-gray-400 uppercase font-semibold">Vehicle</p>
+            <p className="text-[11px] sm:text-xs font-semibold text-gray-800 truncate">{vehicle.registrationNumber || EMPTY}</p>
           </div>
-          <div>
-            <p className="text-[10px] text-gray-400 uppercase font-semibold">Time slot</p>
-            <p className="text-xs font-semibold text-gray-800">{formatTimeSlot(timeSlot)}</p>
+          <div className="col-span-2 sm:col-span-1 min-w-0">
+            <p className="text-[8px] sm:text-[10px] text-gray-400 uppercase font-semibold">Time slot</p>
+            <p className="text-[11px] sm:text-xs font-semibold text-gray-800 truncate">{formatTimeSlot(timeSlot)}</p>
           </div>
         </div>
 
-        <div className="overflow-y-auto p-4 sm:p-5 space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
+        <div className="overflow-y-auto p-3 sm:p-4 md:p-5 space-y-3 sm:space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <PersonCard
               title="Customer"
               name={customer.name}
@@ -438,30 +438,30 @@ const TicketDetailModal = ({ booking, onClose }) => {
               <div className="space-y-3">
                 {booking.serviceDetails.map((svc) => (
                   <div key={svc.id} className="rounded-lg border border-gray-100 overflow-hidden">
-                    <div className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 border-b border-gray-100">
+                    <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 bg-gray-50 border-b border-gray-100">
                       {svc.iconUrl && (
-                        <img src={svc.iconUrl} alt="" className="w-8 h-8 object-contain" />
+                        <img src={svc.iconUrl} alt="" className="w-7 sm:w-8 h-7 sm:h-8 object-contain flex-shrink-0" />
                       )}
-                      <p className="font-bold text-sm text-gray-900">{svc.name}</p>
+                      <p className="font-bold text-xs sm:text-sm text-gray-900 truncate">{svc.name}</p>
                     </div>
                     {(svc.types || []).length > 0 ? (
                       <ul className="divide-y divide-gray-50">
                         {svc.types.map((t) => (
-                          <li key={t.id} className="flex items-start gap-3 px-3 py-2.5">
+                          <li key={t.id} className="flex items-start gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5">
                             {t.imageUrl && (
-                              <img src={t.imageUrl} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                              <img src={t.imageUrl} alt="" className="w-9 sm:w-10 h-9 sm:h-10 rounded object-cover flex-shrink-0" />
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-800">{t.name}</p>
+                              <p className="text-xs sm:text-sm font-medium text-gray-800">{t.name}</p>
                               {hasValue(t.description) && (
-                                <p className="text-xs text-gray-500 mt-1 line-clamp-3 whitespace-pre-line">
-                                  {cleanMultiline(t.description).slice(0, 200)}
-                                  {cleanMultiline(t.description).length > 200 ? "…" : ""}
+                                <p className="text-[11px] sm:text-xs text-gray-500 mt-1 line-clamp-2 sm:line-clamp-3 whitespace-pre-line">
+                                  {cleanMultiline(t.description).slice(0, 150)}
+                                  {cleanMultiline(t.description).length > 150 ? "…" : ""}
                                 </p>
                               )}
                             </div>
                             {t.price != null && (
-                              <span className="text-sm font-bold text-red-600 flex-shrink-0">
+                              <span className="text-xs sm:text-sm font-bold text-red-600 flex-shrink-0 whitespace-nowrap">
                                 {formatCurrency(t.price)}
                               </span>
                             )}
@@ -469,18 +469,18 @@ const TicketDetailModal = ({ booking, onClose }) => {
                         ))}
                       </ul>
                     ) : (
-                      <p className="px-3 py-2 text-xs text-gray-400 italic">Category selected — no sub-service</p>
+                      <p className="px-2 sm:px-3 py-2 text-[11px] sm:text-xs text-gray-400 italic">Category selected — no sub-service</p>
                     )}
                   </div>
                 ))}
               </div>
             )}
             {equipmentNames.length > 0 && (
-              <div className="mt-4 pt-3 border-t">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Equipment Required</p>
-                <div className="flex flex-wrap gap-2">
+              <div className="mt-3 sm:mt-4 pt-3 border-t">
+                <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase mb-2">Equipment Required</p>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
                   {equipmentNames.map((name) => (
-                    <span key={name} className="text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full font-medium">
+                    <span key={name} className="text-[11px] sm:text-xs bg-gray-100 text-gray-700 px-2 sm:px-2.5 py-1 rounded-full font-medium">
                       {name}
                     </span>
                   ))}
@@ -549,7 +549,7 @@ const TicketDetailModal = ({ booking, onClose }) => {
                   {displayText(jobSheet.description)}
                 </p>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 mb-4">
                 {[
                   { label: "Service", amount: jobSheet.serviceCost },
                   { label: "Parts", amount: jobSheet.partsCost },
@@ -558,10 +558,10 @@ const TicketDetailModal = ({ booking, onClose }) => {
                 ].map(({ label, amount, highlight }) => (
                   <div
                     key={label}
-                    className={`rounded-lg p-3 text-center ${highlight ? "bg-red-50 border border-red-100" : "bg-gray-50 border border-gray-100"}`}
+                    className={`rounded-lg p-2 sm:p-3 text-center ${highlight ? "bg-red-50 border border-red-100" : "bg-gray-50 border border-gray-100"}`}
                   >
-                    <p className="text-[10px] text-gray-500 uppercase font-semibold">{label}</p>
-                    <p className={`text-sm font-bold mt-0.5 ${highlight ? "text-red-600" : "text-gray-800"}`}>
+                    <p className="text-[8px] sm:text-[10px] text-gray-500 uppercase font-semibold">{label}</p>
+                    <p className={`text-xs sm:text-sm font-bold mt-0.5 ${highlight ? "text-red-600" : "text-gray-800"}`}>
                       {formatCurrency(amount)}
                     </p>
                   </div>
@@ -596,10 +596,10 @@ const TicketDetailModal = ({ booking, onClose }) => {
                 </div>
               )}
               {(jobSheet.images || []).length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-3">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3">
                   {jobSheet.images.map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noreferrer">
-                      <img src={url} alt="" className="w-16 h-16 object-cover rounded-lg border" />
+                    <a key={i} href={url} target="_blank" rel="noreferrer" className="touch-target">
+                      <img src={url} alt="" className="w-14 sm:w-16 h-14 sm:h-16 object-cover rounded-lg border" />
                     </a>
                   ))}
                 </div>
@@ -609,10 +609,10 @@ const TicketDetailModal = ({ booking, onClose }) => {
 
           {hasPayment && (
             <SectionCard title="Payment" icon={CreditCard}>
-              <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-[10px] text-gray-500 uppercase font-semibold">Amount Paid</p>
-                  <p className="text-xl font-bold text-gray-900">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
+                <div className="min-w-0">
+                  <p className="text-[9px] sm:text-[10px] text-gray-500 uppercase font-semibold">Amount Paid</p>
+                  <p className="text-lg sm:text-xl font-bold text-gray-900">
                     {formatCurrency(payment.amount)}
                     {payment.currency && payment.currency !== "INR" && (
                       <span className="text-xs text-gray-500 ml-1">{payment.currency}</span>
@@ -642,8 +642,8 @@ const TicketDetailModal = ({ booking, onClose }) => {
           {feedback?.isSubmitted && (
             <SectionCard title="Customer Feedback" icon={Star}>
               <StarRating rating={feedback.rating || 0} />
-              <p className="text-[10px] text-gray-400 uppercase font-semibold mt-4 mb-1">Review</p>
-              <p className="text-sm text-gray-700 italic">
+              <p className="text-[9px] sm:text-[10px] text-gray-400 uppercase font-semibold mt-4 mb-1">Review</p>
+              <p className="text-xs sm:text-sm text-gray-700 italic line-clamp-4">
                 {hasValue(feedback.review) ? feedback.review : "No written review"}
               </p>
               <p className="text-xs text-gray-500 mt-2">Submitted: {formatDate(feedback.submittedAt)}</p>
@@ -669,17 +669,17 @@ const TicketDetailModal = ({ booking, onClose }) => {
 
           {(booking.images || []).length > 0 && (
             <SectionCard title={`Booking Images (${booking.images.length})`} icon={ImageIcon}>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-2">
                 {booking.images.map((url, i) => (
                   <a
                     key={i}
                     href={url}
                     target="_blank"
                     rel="noreferrer"
-                    className="group relative aspect-square rounded-lg overflow-hidden border hover:ring-2 hover:ring-red-400"
+                    className="group relative aspect-square rounded-lg overflow-hidden border hover:ring-2 hover:ring-red-400 touch-target"
                   >
                     <img src={url} alt={`Booking ${i + 1}`} className="w-full h-full object-cover" />
-                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center text-white text-xs font-bold opacity-0 group-hover:opacity-100">
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center text-white text-[10px] sm:text-xs font-bold opacity-0 group-hover:opacity-100">
                       View
                     </span>
                   </a>
@@ -789,18 +789,18 @@ const ServiceTickets = () => {
       <div className={`flex-1 flex flex-col ${sidebarOpen ? "lg:ml-60" : ""}`}>
         <TopBar toggleSidebar={toggleSidebar} />
 
-        <main className="flex-1 p-4 sm:p-6 overflow-auto">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">Service Tickets</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-6">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Service Tickets</h1>
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
                 All service bookings with customer & mechanic details
               </p>
             </div>
             <button
               onClick={fetchBookings}
               disabled={loading}
-              className="flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60"
+              className="flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 disabled:opacity-60 touch-target whitespace-nowrap flex-shrink-0"
             >
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
               Refresh
@@ -808,50 +808,50 @@ const ServiceTickets = () => {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+            <div className="bg-red-50 border border-red-200 rounded-lg sm:rounded-xl p-3 sm:p-4 mb-6 flex items-start gap-3">
               <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={18} />
-              <div>
-                <p className="text-red-800 text-sm font-medium">{error}</p>
-                <button onClick={fetchBookings} className="text-red-600 text-sm underline mt-1">
+              <div className="min-w-0 flex-1">
+                <p className="text-red-800 text-xs sm:text-sm font-medium">{error}</p>
+                <button onClick={fetchBookings} className="text-red-600 text-xs sm:text-sm underline mt-1 touch-target">
                   Retry
                 </button>
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 mb-6">
-            <div className="bg-white rounded-xl border p-3">
-              <p className="text-xs text-gray-500">Total</p>
-              <p className="text-xl font-bold text-gray-800">{bookings.length}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3 mb-6">
+            <div className="bg-white rounded-lg sm:rounded-xl border p-2 sm:p-3">
+              <p className="text-[10px] sm:text-xs text-gray-500 truncate">Total</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-800">{bookings.length}</p>
             </div>
-            <div className="bg-white rounded-xl border p-3">
-              <p className="text-xs text-gray-500">Filtered</p>
-              <p className="text-xl font-bold text-red-600">{filteredBookings.length}</p>
+            <div className="bg-white rounded-lg sm:rounded-xl border p-2 sm:p-3">
+              <p className="text-[10px] sm:text-xs text-gray-500 truncate">Filtered</p>
+              <p className="text-lg sm:text-xl font-bold text-red-600">{filteredBookings.length}</p>
             </div>
-            <div className="bg-white rounded-xl border p-3 col-span-2 sm:col-span-2 lg:col-span-3">
-              <p className="text-xs text-gray-500 mb-1">By status (sample)</p>
-              <p className="text-xs text-gray-600 truncate">
+            <div className="bg-white rounded-lg sm:rounded-xl border p-2 sm:p-3 col-span-2 sm:col-span-2 lg:col-span-3">
+              <p className="text-[10px] sm:text-xs text-gray-500 mb-1">By status (sample)</p>
+              <p className="text-[10px] sm:text-xs text-gray-600 truncate">
                 Assigned: {statusCounts.assigned || 0} · Work done: {statusCounts.work_done || 0} · Searching:{" "}
                 {statusCounts.searching || 0}
               </p>
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-xl shadow-sm border mb-6 flex flex-col lg:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
+          <div className="bg-white p-3 sm:p-4 rounded-lg sm:rounded-xl shadow-sm border mb-6 flex flex-col lg:flex-row gap-2 sm:gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search size={16} className="absolute left-3 top-2.5 text-gray-400 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Search booking ID, customer, mechanic, vehicle, services..."
+                placeholder="Search booking ID, customer, mechanic, vehicle..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border focus:ring-2 focus:ring-red-500 text-sm"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border focus:ring-2 focus:ring-red-500 text-xs sm:text-sm"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg border text-sm min-w-[180px]"
+              className="px-2 sm:px-3 py-2 rounded-lg border text-xs sm:text-sm min-w-[150px] sm:min-w-[180px] touch-target"
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -867,7 +867,7 @@ const ServiceTickets = () => {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg border text-sm min-w-[140px]"
+              className="px-2 sm:px-3 py-2 rounded-lg border text-xs sm:text-sm min-w-[120px] sm:min-w-[140px] touch-target"
             >
               {BOOKING_TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -877,19 +877,19 @@ const ServiceTickets = () => {
             </select>
           </div>
 
-          <div className="bg-white rounded-xl border overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 text-gray-600">
+          <div className="bg-white rounded-lg sm:rounded-xl border overflow-hidden shadow-sm">
+            <div className="overflow-x-auto scrollbar-sm">
+              <table className="w-full text-xs sm:text-sm">
+                <thead className="bg-gray-100 text-gray-600 sticky top-0 z-10">
                   <tr>
-                    <th className="p-3 text-left font-semibold">Booking</th>
-                    <th className="p-3 text-left font-semibold">Customer</th>
-                    <th className="p-3 text-left font-semibold">Mechanic</th>
-                    <th className="p-3 text-left font-semibold hidden md:table-cell">Vehicle</th>
-                    <th className="p-3 text-left font-semibold hidden lg:table-cell">Services</th>
-                    <th className="p-3 text-center font-semibold">Type</th>
-                    <th className="p-3 text-center font-semibold">Status</th>
-                    <th className="p-3 text-center font-semibold">Action</th>
+                    <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs">Booking</th>
+                    <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs">Customer</th>
+                    <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs">Mechanic</th>
+                    <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs hidden md:table-cell">Vehicle</th>
+                    <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs hidden lg:table-cell">Services</th>
+                    <th className="p-2 sm:p-3 text-center font-semibold text-[10px] sm:text-xs">Type</th>
+                    <th className="p-2 sm:p-3 text-center font-semibold text-[10px] sm:text-xs">Status</th>
+                    <th className="p-2 sm:p-3 text-center font-semibold text-[10px] sm:text-xs">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -897,7 +897,7 @@ const ServiceTickets = () => {
                     [...Array(6)].map((_, i) => <RowSkeleton key={i} />)
                   ) : filteredBookings.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-12 text-center text-gray-500">
+                      <td colSpan={8} className="p-8 sm:p-12 text-center text-xs sm:text-sm text-gray-500">
                         No service tickets found
                       </td>
                     </tr>
@@ -911,57 +911,54 @@ const ServiceTickets = () => {
                           key={b.bookingId}
                           className="border-t border-gray-100 hover:bg-red-50/30 transition-colors"
                         >
-                          <td className="p-3">
-                            {/* <p className="font-mono text-xs text-gray-500 truncate max-w-[120px]" title={b.bookingId}>
-                              {b.bookingId?.slice(0, 10)}…
-                            </p> */}
-                            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                          <td className="p-2 sm:p-3">
+                            <p className="text-[9px] sm:text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                               <Calendar size={10} />
                               {formatDate(b.createdAt).split(",")[0]}
                             </p>
-                            <p className="text-xs font-medium text-gray-700 mt-0.5">{getEstimatedCost(b)}</p>
+                            <p className="text-[11px] sm:text-xs font-medium text-gray-700 mt-0.5">{getEstimatedCost(b)}</p>
                           </td>
-                          <td className="p-3">
-                            <p className="font-medium text-gray-800 truncate max-w-[140px]">
+                          <td className="p-2 sm:p-3 min-w-0">
+                            <p className="font-medium text-gray-800 truncate text-xs sm:text-sm">
                               {customer.name || "Customer"}
                             </p>
-                            <p className="text-xs text-gray-500">{formatPhone(customer.phone)}</p>
+                            <p className="text-[9px] sm:text-xs text-gray-500 truncate">{formatPhone(customer.phone)}</p>
                           </td>
-                          <td className="p-3">
-                            <p className="font-medium text-gray-800 truncate max-w-[140px]">
+                          <td className="p-2 sm:p-3 min-w-0">
+                            <p className="font-medium text-gray-800 truncate text-xs sm:text-sm">
                               {mechanic.fullName || EMPTY}
                             </p>
-                            <p className="text-xs text-gray-500">{formatPhone(mechanic.phone)}</p>
+                            <p className="text-[9px] sm:text-xs text-gray-500 truncate">{formatPhone(mechanic.phone)}</p>
                           </td>
-                          <td className="p-3 hidden md:table-cell">
-                            <p className="text-gray-800 truncate max-w-[160px]">
+                          <td className="p-2 sm:p-3 hidden md:table-cell min-w-0">
+                            <p className="text-xs sm:text-sm text-gray-800 truncate">
                               {vehicle.brand} {vehicle.model || vehicle.vehicleName}
                             </p>
-                            <p className="text-xs text-gray-500">{vehicle.registrationNumber || EMPTY}</p>
+                            <p className="text-[9px] sm:text-xs text-gray-500 truncate">{vehicle.registrationNumber || EMPTY}</p>
                           </td>
-                          <td className="p-3 hidden lg:table-cell">
-                            <p className="text-xs text-gray-600 line-clamp-2 max-w-[200px]">{getServiceNames(b)}</p>
+                          <td className="p-2 sm:p-3 hidden lg:table-cell min-w-0">
+                            <p className="text-[9px] sm:text-xs text-gray-600 line-clamp-2 max-w-[200px]">{getServiceNames(b)}</p>
                           </td>
-                          <td className="p-3 text-center">
+                          <td className="p-2 sm:p-3 text-center">
                             <span
-                              className={`text-[10px] px-2 py-0.5 rounded-full border font-medium capitalize ${getBookingTypeStyle(b.bookingType)}`}
+                              className={`text-[8px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full border font-medium capitalize ${getBookingTypeStyle(b.bookingType)}`}
                             >
                               {formatBookingType(b.bookingType)}
                             </span>
                           </td>
-                          <td className="p-3 text-center">
+                          <td className="p-2 sm:p-3 text-center">
                             <span
-                              className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${getStatusStyle(b.status)}`}
+                              className={`text-[8px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${getStatusStyle(b.status)}`}
                             >
                               {formatStatus(b.status)}
                             </span>
                           </td>
-                          <td className="p-3 text-center">
+                          <td className="p-2 sm:p-3 text-center">
                             <button
                               onClick={() => setSelectedBooking(b)}
-                              className="inline-flex items-center gap-1 text-red-600 hover:text-red-800 text-xs font-semibold"
+                              className="inline-flex items-center gap-0.5 sm:gap-1 text-red-600 hover:text-red-800 text-xs sm:text-sm font-semibold touch-target"
                             >
-                              View <ChevronRight size={14} />
+                              View <ChevronRight size={14} className="hidden sm:inline" />
                             </button>
                           </td>
                         </tr>

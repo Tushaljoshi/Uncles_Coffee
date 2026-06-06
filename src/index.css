@@ -16,4 +16,34 @@
   .animate-slide-up {
     animation: slide-up 0.3s ease-out;
   }
+
+  /* Touch-friendly target sizing (min 44x44px) */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+
+  /* Responsive scrollbar styling */
+  .scrollbar-sm {
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db #f3f4f6;
+  }
+
+  .scrollbar-sm::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+
+  .scrollbar-sm::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 10px;
+  }
+
+  .scrollbar-sm::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 10px;
+  }
+
+  .scrollbar-sm::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
   
