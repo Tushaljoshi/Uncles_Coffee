@@ -31,7 +31,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         { label: "Add Banner", icon: ImageIcon, path: "/add-banner" },
         { label: "Add Review", icon: ScanEyeIcon, path: "/add-review" },
         { label: "Create Services", icon: CarFrontIcon, path: "/service" },
-        { label: "Job Required Parts", icon: Wrench, path: "/job-part" },
+        { label: "Add Spare Parts", icon: Wrench, path: "/job-part" },
         { label: "SOS Vehicle Issues", icon: ScanEyeIcon, path: "/visible-issues" },
         { label: "Create Plan", icon: CoinsIcon, path: "/plan" },
         { label: "Mechanic Services", icon: PackageOpenIcon, path: "/mechanicaservices" },
