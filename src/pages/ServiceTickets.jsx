@@ -16,7 +16,12 @@ import {
   Star,
   Image as ImageIcon,
   ClipboardList,
+  Download,
+  FileText,
+  ExternalLink,
+  Navigation,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
@@ -152,6 +157,78 @@ const formatDistance = (km) => {
   if (Number.isNaN(n)) return EMPTY;
   return n < 1 ? `${(n * 1000).toFixed(0)} m` : `${n.toFixed(1)} km`;
 };
+
+const getMechanicMapLink = (tracking) => {
+  if (!tracking?.latitude || !tracking?.longitude) return null;
+  return `https://www.google.com/maps/?q=${tracking.latitude},${tracking.longitude}`;
+};
+
+const MechanicLiveLocationCard = ({ tracking }) => {
+  if (!tracking?.latitude || !tracking?.longitude) return null;
+
+  const mapLink = getMechanicMapLink(tracking);
+  const coordinates = formatCoordinates(tracking.latitude, tracking.longitude);
+  const address = displayText(tracking.address);
+  const isOnline = tracking.isOnline ? "Yes" : "No";
+  const lastSeen = tracking.updatedAt ? formatDate(tracking.updatedAt) : EMPTY;
+
+  return (
+    <div className="rounded-lg border-2 border-red-200 bg-red-50 overflow-hidden">
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-red-100 border-b border-red-200 flex items-center gap-2">
+        <Navigation size={16} className="text-red-600 flex-shrink-0" />
+        <h4 className="text-xs sm:text-sm font-bold text-red-800">Mechanic Live Location</h4>
+      </div>
+      <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+        {/* Coordinates with Map Link */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <p className="text-[9px] sm:text-[10px] font-semibold text-red-600 uppercase tracking-wide mb-1">GPS Coordinates</p>
+            <p className="text-xs sm:text-sm font-mono text-red-900 bg-white px-2 py-1 rounded border border-red-100 break-all">
+              {coordinates}
+            </p>
+          </div>
+          {mapLink && (
+            <a
+              href={mapLink}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs font-semibold touch-target whitespace-nowrap"
+            >
+              <MapPin size={14} />
+              View Map
+            </a>
+          )}
+        </div>
+
+        {/* Address */}
+        {address !== EMPTY && (
+          <div>
+            <p className="text-[9px] sm:text-[10px] font-semibold text-red-600 uppercase tracking-wide mb-1">Location Address</p>
+            <p className="text-xs sm:text-sm text-red-900 bg-white px-2 py-2 rounded border border-red-100 break-words">
+              {address}
+            </p>
+          </div>
+        )}
+
+        {/* Status Info */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-white px-2 py-2 rounded border border-red-100">
+            <p className="text-[8px] font-semibold text-red-600 uppercase tracking-wide mb-0.5">Online Status</p>
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${isOnline === "Yes" ? "bg-green-500" : "bg-gray-400"}`} />
+              <p className="text-xs font-bold text-red-900">{isOnline}</p>
+            </div>
+          </div>
+          <div className="bg-white px-2 py-2 rounded border border-red-100">
+            <p className="text-[8px] font-semibold text-red-600 uppercase tracking-wide mb-0.5">Last Seen</p>
+            <p className="text-[10px] font-semibold text-red-900 line-clamp-2">{lastSeen}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const uniqueNames = (items, key = "name") =>
   [...new Set((items || []).map((i) => i[key]).filter(Boolean))];
@@ -490,39 +567,34 @@ const TicketDetailModal = ({ booking, onClose }) => {
           </SectionCard>
 
           <SectionCard title="Location & Live Tracking" icon={MapPin}>
-            <InfoGrid
-              items={[
-                { label: "Service Address", value: displayText(location.address), fullWidth: true },
-                { label: "Location Type", value: formatLocationType(location.type) },
-                {
-                  label: "GPS Coordinates",
-                  value: formatCoordinates(location.latitude, location.longitude),
-                  mono: true,
-                  show: location.latitude != null,
-                },
-                {
-                  label: "Distance to Customer",
-                  value: formatDistance(tracking.distanceFromCustomerKm),
-                  show: tracking.enabled && tracking.distanceFromCustomerKm != null,
-                },
-                {
-                  label: "Mechanic Live Location",
-                  value: displayText(tracking.mechanicLocation?.address),
-                  fullWidth: true,
-                  show: hasValue(tracking.mechanicLocation?.address),
-                },
-                {
-                  label: "Mechanic Last Seen",
-                  value: formatDate(tracking.mechanicLocation?.updatedAt),
-                  show: hasValue(tracking.mechanicLocation?.updatedAt),
-                },
-                {
-                  label: "Mechanic Online",
-                  value: tracking.mechanicLocation?.isOnline ? "Yes" : "No",
-                  show: tracking.mechanicLocation?.isOnline != null,
-                },
-              ]}
-            />
+            <div className="space-y-4">
+              {/* Service Location */}
+              <div>
+                <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Service Location</p>
+                <InfoGrid
+                  items={[
+                    { label: "Service Address", value: displayText(location.address), fullWidth: true },
+                    { label: "Location Type", value: formatLocationType(location.type) },
+                    {
+                      label: "GPS Coordinates",
+                      value: formatCoordinates(location.latitude, location.longitude),
+                      mono: true,
+                      show: location.latitude != null,
+                    },
+                    {
+                      label: "Distance to Customer",
+                      value: formatDistance(tracking.distanceFromCustomerKm),
+                      show: tracking.enabled && tracking.distanceFromCustomerKm != null,
+                    },
+                  ]}
+                />
+              </div>
+
+              {/* Mechanic Live Location */}
+              {(tracking.latitude != null || tracking.mechanicLocation?.latitude != null) && (
+                <MechanicLiveLocationCard tracking={tracking.mechanicLocation || tracking} />
+              )}
+            </div>
           </SectionCard>
 
           {(booking.jobTimeline || []).length > 0 && (
@@ -693,6 +765,104 @@ const TicketDetailModal = ({ booking, onClose }) => {
   );
 };
 
+const ExportModal = ({ allCount, onClose, onExport }) => {
+  const [fileName, setFileName] = useState(`ServiceTickets_Export_${new Date().toISOString().split("T")[0]}`);
+  const [sheetName, setSheetName] = useState("Service Tickets");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl overflow-hidden">
+        <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
+              <Download size={18} className="text-red-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800">Export to Excel</h3>
+              <p className="text-xs text-slate-400">Configure your export settings</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={18} /></button>
+        </div>
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">File Name</label>
+            <div className="flex items-center gap-2">
+              <input value={fileName} onChange={e => setFileName(e.target.value)} className="flex-1 min-w-0 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Enter file name..." />
+              <span className="text-xs text-slate-400 font-mono bg-slate-100 px-2 py-2.5 rounded-lg flex-shrink-0">.xlsx</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Sheet Name</label>
+            <input value={sheetName} onChange={e => setSheetName(e.target.value)} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Sheet name..." />
+          </div>
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-3">
+            <FileText size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Will export <span className="font-bold text-slate-800">{allCount} ticket{allCount !== 1 ? "s" : ""}</span> with <span className="font-bold text-slate-800">16 columns</span> (including mechanic live location) into <span className="font-mono text-green-700 font-bold">{fileName || "export"}.xlsx</span>.
+            </p>
+          </div>
+        </div>
+        <div className="p-4 sm:p-6 border-t border-slate-100 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors text-sm">Cancel</button>
+          <button onClick={() => onExport({ fileName: fileName || "export", sheetName: sheetName || "Sheet1" })} className="flex-1 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition-all shadow-md flex items-center justify-center gap-2 text-sm">
+            <Download size={16} /> Export Excel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const buildAndExport = (bookingsToExport, { fileName, sheetName }) => {
+  const rows = bookingsToExport.map((b) => {
+    const customer = b.customer || {};
+    const mechanic = b.mechanic || {};
+    const vehicle = b.vehicle || {};
+    const location = b.location || {};
+    const tracking = b.tracking || {};
+    const mechanicLocation = tracking.mechanicLocation || tracking;
+
+    return {
+      // "Booking ID": displayText(b.bookingId),
+      "Status": formatStatus(b.status),
+      "Booking Type": formatBookingType(b.bookingType),
+      "Customer Name": displayText(customer.name),
+      "Customer Phone": formatPhone(customer.phone),
+      // "Customer ID": displayText(customer.userId),
+      "Mechanic Name": displayText(mechanic.fullName),
+      "Mechanic Phone": formatPhone(mechanic.phone),
+      // "Mechanic ID": displayText(mechanic.mechanicId || b.mechanicId),
+      "Vehicle": `${vehicle.brand || ""} ${vehicle.model || vehicle.vehicleName || ""}`.trim() || EMPTY,
+      "Registration Number": displayText(vehicle.registrationNumber),
+      "Services": getServiceNames(b),
+      "Estimated Cost": getEstimatedCost(b),
+      "Service Address": displayText(location.address),
+      "Mechanic Live Coordinates": mechanicLocation.latitude && mechanicLocation.longitude 
+        ? formatCoordinates(mechanicLocation.latitude, mechanicLocation.longitude)
+        : EMPTY,
+      "Mechanic Location": displayText(mechanicLocation.address),
+      "Mechanic Online": mechanicLocation.isOnline ? "Yes" : "No",
+      "Booking Date": formatDate(b.createdAt),
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws["!cols"] = [
+    { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 },
+    { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+    { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 40 },
+    { wch: 18 }, { wch: 30 }, { wch: 12 }, { wch: 14 },
+  ];
+  ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft" };
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: range.e.c } }) };
+  
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `${fileName}.xlsx`);
+};
+
 const RowSkeleton = () => (
   <tr className="animate-pulse border-b">
     {[...Array(8)].map((_, i) => (
@@ -712,6 +882,7 @@ const ServiceTickets = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -782,6 +953,11 @@ const ServiceTickets = () => {
     return counts;
   }, [bookings]);
 
+  const handleExport = ({ fileName, sheetName }) => {
+    buildAndExport(bookings, { fileName, sheetName });
+    setShowExportModal(false);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
@@ -797,14 +973,24 @@ const ServiceTickets = () => {
                 All service bookings with customer & mechanic details
               </p>
             </div>
-            <button
-              onClick={fetchBookings}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 disabled:opacity-60 touch-target whitespace-nowrap flex-shrink-0"
-            >
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              <button
+                onClick={fetchBookings}
+                disabled={loading}
+                className="flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 disabled:opacity-60 touch-target whitespace-nowrap flex-shrink-0"
+              >
+                <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+                Refresh
+              </button>
+              <button
+                onClick={() => setShowExportModal(true)}
+                disabled={bookings.length === 0}
+                className="flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-medium hover:bg-green-700 disabled:opacity-60 touch-target whitespace-nowrap flex-shrink-0"
+              >
+                <Download size={16} />
+                Export
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -974,6 +1160,10 @@ const ServiceTickets = () => {
 
       {selectedBooking && (
         <TicketDetailModal booking={selectedBooking} onClose={() => setSelectedBooking(null)} />
+      )}
+
+      {showExportModal && (
+        <ExportModal allCount={bookings.length} onClose={() => setShowExportModal(false)} onExport={handleExport} />
       )}
     </div>
   );
