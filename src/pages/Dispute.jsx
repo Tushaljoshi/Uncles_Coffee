@@ -1,71 +1,177 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   X,
   FileText,
   RefreshCw,
-  Mail,
   Clock,
-  CheckCircle,
 } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
-/* ================= DUMMY DISPUTE DATA ================= */
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-const DUMMY_DISPUTES = [
-  {
-    id: 1,
-    disputeId: "DS-226412",
-    service: "General Service",
-    vehicle: "Hyundai i20 | Petrol | MH 12 AB 1234",
-    dateTime: "28 Dec, 2025 | 10:15 AM",
-    username: "Vivek Sharma",
-    email: "vivek054@gmail.com",
-    reason: "Unsatisfactory service quality",
-    description: "Mechanic did not complete service properly.",
-    status: "submitted",
-    createdAt: "29 Nov, 10:15 AM",
-  },
-  {
-    id: 2,
-    disputeId: "DS-226413",
-    service: "Brake Service",
-    vehicle: "Honda City | Petrol | DL 01 AA 7788",
-    dateTime: "25 Dec, 2025 | 04:30 PM",
-    username: "Ananya Verma",
-    email: "ananya@gmail.com",
-    reason: "Incorrect charges & bill discrepancy",
-    description: "Charged more than estimated amount.",
-    status: "under-review",
-    createdAt: "28 Nov, 02:20 PM",
-  },
+const STATUS_FLOW = ["raised", "under_review", "resolution_in_progress", "resolved"];
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "All Status" },
+  { value: "raised", label: "Raised" },
+  { value: "under_review", label: "Under Review" },
+  { value: "resolution_in_progress", label: "Resolution in Progress" },
+  { value: "resolved", label: "Resolved" },
 ];
 
-const STATUS_FLOW = [
-  "submitted",
-  "under-review",
-  "in-progress",
-  "resolved",
-];
+const UPDATE_STATUS_OPTIONS = STATUS_OPTIONS.filter((opt) => opt.value !== "all");
+
+const formatStatus = (status) =>
+  (status || "unknown")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+const getStatusStyle = (status) => {
+  const map = {
+    raised: "bg-red-100 text-red-700 border border-red-200",
+    under_review: "bg-amber-100 text-amber-800 border border-amber-200",
+    resolution_in_progress: "bg-blue-100 text-blue-700 border border-blue-200",
+    resolved: "bg-green-100 text-green-700 border border-green-200",
+  };
+  return map[status] || "bg-gray-100 text-gray-600 border border-gray-200";
+};
+
+const getStatusDotColor = (status) => {
+  const map = {
+    raised: "bg-red-600",
+    under_review: "bg-amber-500",
+    resolution_in_progress: "bg-blue-600",
+    resolved: "bg-green-600",
+  };
+  return map[status] || "bg-gray-400";
+};
+
+const formatDate = (date) => {
+  if (!date) return "—";
+  return new Date(date).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const normalizeDispute = (item) => {
+  const dispute = item.dispute || {};
+  return {
+    id: item.bookingDocId || item.bookingId,
+    bookingId: item.bookingId,
+    disputeId: dispute.disputeId || "—",
+    username: item.customer?.name || "Unknown",
+    customerImage: item.customer?.image || "",
+    mechanicName: item.mechanic?.name || "—",
+    mechanicImage: item.mechanic?.image || "",
+    serviceStatus: item.serviceStatus,
+    reason: dispute.reason || "—",
+    description: dispute.description || "",
+    status: dispute.status || "raised",
+    images: dispute.images || [],
+    createdAt: dispute.createdAt,
+    updatedAt: dispute.updatedAt,
+    resolvedAt: dispute.resolvedAt,
+    resolution: dispute.resolution,
+    adminRemark: dispute.adminRemark,
+  };
+};
 
 const AdminDisputePage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
-  const [disputes, setDisputes] = useState(DUMMY_DISPUTES);
+  const [disputes, setDisputes] = useState([]);
   const [selectedDispute, setSelectedDispute] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [editStatus, setEditStatus] = useState("raised");
+  const [editRemark, setEditRemark] = useState("");
+  const [updating, setUpdating] = useState(false);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-  /* ================= FILTER LOGIC ================= */
+  const fetchDisputes = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/servicebookings/admin/disputes`);
+      if (!res.ok) throw new Error(`API Error: ${res.status}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setDisputes(data.data.map(normalizeDispute));
+      } else {
+        throw new Error(data.message || "Failed to load disputes");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to fetch disputes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDisputes();
+  }, []);
+
+  useEffect(() => {
+    if (selectedDispute) {
+      setEditStatus(selectedDispute.status);
+      setEditRemark(selectedDispute.adminRemark || "");
+    }
+  }, [selectedDispute]);
+
+  const updateDisputeStatus = async () => {
+    if (!selectedDispute) return;
+    setUpdating(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/servicebookings/admin/update-dispute-status/${selectedDispute.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: editStatus,
+            adminRemark: editRemark,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || "Failed to update dispute");
+      }
+
+      const updated = {
+        ...selectedDispute,
+        status: editStatus,
+        adminRemark: editRemark,
+      };
+      setDisputes((prev) =>
+        prev.map((d) => (d.id === selectedDispute.id ? updated : d))
+      );
+      setSelectedDispute(updated);
+    } catch (err) {
+      setError(err.message || "Unable to update dispute status");
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const filteredDisputes = disputes.filter((d) => {
+    const searchText = search.toLowerCase();
     const matchSearch =
-      d.username.toLowerCase().includes(search.toLowerCase()) ||
-      d.email.toLowerCase().includes(search.toLowerCase()) ||
-      d.disputeId.toLowerCase().includes(search.toLowerCase());
+      d.username.toLowerCase().includes(searchText) ||
+      d.disputeId.toLowerCase().includes(searchText) ||
+      d.bookingId.toLowerCase().includes(searchText) ||
+      d.mechanicName.toLowerCase().includes(searchText) ||
+      d.reason.toLowerCase().includes(searchText);
 
     const matchStatus =
       statusFilter === "all" || d.status === statusFilter;
@@ -73,18 +179,9 @@ const AdminDisputePage = () => {
     return matchSearch && matchStatus;
   });
 
-  /* ================= UPDATE STATUS ================= */
-
-  const updateStatus = (id, newStatus) => {
-    setDisputes((prev) =>
-      prev.map((d) =>
-        d.id === id ? { ...d, status: newStatus } : d
-      )
-    );
-
-    setSelectedDispute((prev) =>
-      prev ? { ...prev, status: newStatus } : null
-    );
+  const getStatusStepIndex = (status) => {
+    const idx = STATUS_FLOW.indexOf(status);
+    return idx >= 0 ? idx : 0;
   };
 
   return (
@@ -95,7 +192,6 @@ const AdminDisputePage = () => {
         <TopBar toggleSidebar={toggleSidebar} />
 
         <main className="p-6">
-          {/* HEADER */}
           <div className="flex justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-800">
@@ -106,19 +202,28 @@ const AdminDisputePage = () => {
               </p>
             </div>
 
-            <button className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg">
-              <RefreshCw size={16} />
+            <button
+              onClick={fetchDisputes}
+              disabled={loading}
+              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
           </div>
 
-          {/* SEARCH & FILTER */}
+          {error && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+              {error}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-4 mb-6">
             <div className="relative flex-1">
               <Search size={18} className="absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by name, email or dispute ID"
+                placeholder="Search by name, dispute ID, booking ID or reason"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10 w-full py-2 border rounded-lg"
@@ -130,39 +235,57 @@ const AdminDisputePage = () => {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="border rounded-lg px-4 py-2"
             >
-              <option value="all">All Status</option>
-              <option value="submitted">Submitted</option>
-              <option value="under-review">Under Review</option>
-              <option value="in-progress">In Progress</option>
-              <option value="resolved">Resolved</option>
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* TABLE */}
           <div className="bg-white rounded-xl border overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="p-4 text-left">User</th>
-                  <th className="p-4 text-left">Service</th>
+                  <th className="p-4 text-left">Customer</th>
+                  <th className="p-4 text-left">Mechanic</th>
                   <th className="p-4 text-center">Status</th>
-                  <th className="p-4 text-center">Date</th>
+                  <th className="p-4 text-center">Raised On</th>
                   <th className="p-4 text-center">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredDisputes.length ? (
+                {loading ? (
+                  [...Array(4)].map((_, i) => (
+                    <tr key={i} className="border-t animate-pulse">
+                      {[...Array(5)].map((__, j) => (
+                        <td key={j} className="p-4">
+                          <div className="h-4 bg-gray-200 rounded" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : filteredDisputes.length ? (
                   filteredDisputes.map((d) => (
                     <tr key={d.id} className="border-t hover:bg-gray-50">
                       <td className="p-4">
                         <p className="font-medium">{d.username}</p>
-                        <p className="text-xs text-gray-500">{d.email}</p>
+                        <p className="text-xs text-gray-500">{d.disputeId}</p>
                       </td>
-                      <td className="p-4">{d.service}</td>
-                      <td className="p-4 text-center capitalize">
-                        {d.status.replace("-", " ")}
+                      <td className="p-4">
+                        <p>{d.mechanicName}</p>
+                        <p className="text-xs text-gray-500 capitalize">
+                          {formatStatus(d.serviceStatus)}
+                        </p>
                       </td>
-                      <td className="p-4 text-center">{d.createdAt}</td>
+                      <td className="p-4 text-center">
+                        <span
+                          className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${getStatusStyle(d.status)}`}
+                        >
+                          {formatStatus(d.status)}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">{formatDate(d.createdAt)}</td>
                       <td className="p-4 text-center">
                         <button
                           onClick={() => setSelectedDispute(d)}
@@ -190,12 +313,11 @@ const AdminDisputePage = () => {
         </main>
       </div>
 
-      {/* ================= DISPUTE MODAL ================= */}
       {selectedDispute && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden">
+          <div className="bg-white w-full max-w-lg rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="p-5 border-b flex justify-between">
-              <h2 className="font-semibold">Dispute Status</h2>
+              <h2 className="font-semibold">Dispute Details</h2>
               <button onClick={() => setSelectedDispute(null)}>
                 <X />
               </button>
@@ -205,61 +327,137 @@ const AdminDisputePage = () => {
               <div className="bg-red-50 p-4 rounded-xl">
                 <p className="text-sm font-medium">Dispute ID</p>
                 <p className="text-sm text-gray-600">
-                  #{selectedDispute.disputeId}
+                  {selectedDispute.disputeId}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Booking: {selectedDispute.bookingId}
                 </p>
               </div>
 
-              {/* STATUS TIMELINE */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-xs text-gray-500">Customer</p>
+                  <p className="font-medium">{selectedDispute.username}</p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-xs text-gray-500">Mechanic</p>
+                  <p className="font-medium">{selectedDispute.mechanicName}</p>
+                </div>
+              </div>
+
               <div>
-                <h3 className="font-medium mb-2">Status</h3>
-                {STATUS_FLOW.map((s, i) => (
-                  <div key={s} className="flex items-center gap-3 mb-2">
-                    <div
-                      className={`w-3 h-3 rounded-full ${
-                        STATUS_FLOW.indexOf(selectedDispute.status) >= i
-                          ? "bg-red-600"
-                          : "border"
-                      }`}
-                    />
-                    <p className="text-sm capitalize">
-                      {s.replace("-", " ")}
-                    </p>
-                  </div>
-                ))}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium">Status</h3>
+                  <span
+                    className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${getStatusStyle(selectedDispute.status)}`}
+                  >
+                    {formatStatus(selectedDispute.status)}
+                  </span>
+                </div>
+                {STATUS_FLOW.map((s, i) => {
+                  const isActive = getStatusStepIndex(selectedDispute.status) >= i;
+                  return (
+                    <div key={s} className="flex items-center gap-3 mb-2">
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          isActive ? getStatusDotColor(s) : "border border-gray-300 bg-white"
+                        }`}
+                      />
+                      <p
+                        className={`text-sm ${
+                          isActive ? "font-medium text-gray-800" : "text-gray-400"
+                        }`}
+                      >
+                        {formatStatus(s)}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
 
               <p className="text-sm text-gray-700">
                 <strong>Reason:</strong> {selectedDispute.reason}
               </p>
 
-              <p className="text-sm text-gray-600">
-                {selectedDispute.description}
-              </p>
+              {selectedDispute.description && (
+                <p className="text-sm text-gray-600">
+                  <strong>Description:</strong> {selectedDispute.description}
+                </p>
+              )}
 
-              <select
-                value={selectedDispute.status}
-                onChange={(e) =>
-                  updateStatus(selectedDispute.id, e.target.value)
-                }
-                className="w-full border rounded-lg px-4 py-2"
-              >
-                <option value="submitted">Submitted</option>
-                <option value="under-review">Under Review</option>
-                <option value="in-progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-              </select>
+              {selectedDispute.resolution && (
+                <p className="text-sm text-green-700 bg-green-50 p-3 rounded-lg">
+                  <strong>Resolution:</strong> {selectedDispute.resolution}
+                </p>
+              )}
 
-              <button
-                onClick={() =>
-                  window.open(
-                    `mailto:${selectedDispute.email}`,
-                    "_blank"
-                  )
-                }
-                className="w-full bg-red-600 text-white py-3 rounded-xl"
-              >
-                Reply via Email
-              </button>
+              {selectedDispute.adminRemark && (
+                <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                  <strong>Admin Remark:</strong> {selectedDispute.adminRemark}
+                </p>
+              )}
+
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <Clock size={14} />
+                <span>Raised: {formatDate(selectedDispute.createdAt)}</span>
+                {selectedDispute.resolvedAt && (
+                  <span>· Resolved: {formatDate(selectedDispute.resolvedAt)}</span>
+                )}
+              </div>
+
+              {selectedDispute.images.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2">
+                    Evidence ({selectedDispute.images.length})
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedDispute.images.map((url, i) => (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="aspect-square rounded-lg overflow-hidden border hover:ring-2 hover:ring-red-400"
+                      >
+                        <img
+                          src={url}
+                          alt={`Dispute evidence ${i + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 border-t space-y-3">
+                <h3 className="font-medium">Update Status</h3>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="w-full border rounded-lg px-4 py-2"
+                >
+                  {UPDATE_STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  value={editRemark}
+                  onChange={(e) => setEditRemark(e.target.value)}
+                  placeholder="Admin remark (e.g. Investigation started)"
+                  rows={3}
+                  className="w-full border rounded-lg px-4 py-2 resize-none"
+                />
+                <button
+                  onClick={updateDisputeStatus}
+                  disabled={updating}
+                  className="w-full bg-red-600 text-white py-3 rounded-xl disabled:opacity-50"
+                >
+                  {updating ? "Updating..." : "Update Dispute"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

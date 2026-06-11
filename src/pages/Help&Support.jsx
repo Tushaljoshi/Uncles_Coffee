@@ -4,15 +4,42 @@ import {
   X,
   FileText,
   RefreshCw,
-  Mail,
-  Clock,
-  CheckCircle,
 } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
-const STATUS_STEPS = ["pending", "in-progress", "resolved"];
+const STATUS_OPTIONS = ["Pending", "Open", "In Progress", "Resolved", "Closed"];
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
+const getTicketDocId = (ticket) =>
+  ticket?.ticketDocId || ticket?._id || ticket?.id;
+const normalizeStatusKey = (status) =>
+  String(status || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getStatusStyle = (status) => {
+  const map = {
+    pending: "bg-amber-100 text-amber-800 border border-amber-200",
+    open: "bg-red-100 text-red-700 border border-red-200",
+    "in progress": "bg-blue-100 text-blue-700 border border-blue-200",
+    resolved: "bg-green-100 text-green-700 border border-green-200",
+    closed: "bg-gray-100 text-gray-600 border border-gray-200",
+  };
+  return map[normalizeStatusKey(status)] || "bg-gray-100 text-gray-600 border border-gray-200";
+};
+
+const StatusBadge = ({ status }) => {
+  if (!status) return <span className="text-gray-400">-</span>;
+  return (
+    <span
+      className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${getStatusStyle(status)}`}
+    >
+      {status}
+    </span>
+  );
+};
 
 const Reports = () => {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
@@ -24,6 +51,9 @@ const Reports = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [replyMessage, setReplyMessage] = useState("");
+  const [replying, setReplying] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -31,44 +61,50 @@ const Reports = () => {
 
   const filteredReports = reports.filter((r) => {
     const searchText = searchQuery.toLowerCase();
-    const userName = String(r.username || r.userId || "").toLowerCase();
-    const contactEmail = String(r.contactEmail || "").toLowerCase();
-    const ticketId = String(r.reportId || r.ticketId || "").toLowerCase();
-    const issueType = String(r.issueCategory || r.issueType || "").toLowerCase();
+    const userName = String(r.userDetails?.name || "").toLowerCase();
+    const contactEmail = String(r.userDetails?.email || "").toLowerCase();
+    const contactPhone = String(r.userDetails?.phone || "").toLowerCase();
+    const ticketId = String(r.ticketId || "").toLowerCase();
+    const issueType = String(r.issueType || "").toLowerCase();
     const description = String(r.description || "").toLowerCase();
 
     const matchSearch =
       userName.includes(searchText) ||
       contactEmail.includes(searchText) ||
+      contactPhone.includes(searchText) ||
       ticketId.includes(searchText) ||
       issueType.includes(searchText) ||
       description.includes(searchText);
 
-    const statusValue = String(r.status || "").toLowerCase();
-    const matchStatus = filterStatus === "all" || statusValue === filterStatus;
+    const matchStatus =
+      filterStatus === "all" || normalizeStatusKey(r.status) === filterStatus;
     const matchCategory =
-      filterCategory === "all" || issueType === filterCategory.toLowerCase();
+      filterCategory === "all" ||
+      String(r.issueType || "").toLowerCase() === filterCategory.toLowerCase();
 
     return matchSearch && matchStatus && matchCategory;
   });
 
   /* ================= UPDATE STATUS (LOCAL) ================= */
 
-  const fetchTickets = async () => {
-    setLoading(true);
+  const fetchTickets = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError("");
     try {
       const res = await fetch(`${API_BASE}/api/support/admin/support-tickets`);
       const data = await res.json();
       if (data.success) {
-        setReports(Array.isArray(data.data) ? data.data : []);
-      } else {
-        setError(data.message || "Failed to load support tickets");
+        const tickets = Array.isArray(data.data) ? data.data : [];
+        setReports(tickets);
+        return tickets;
       }
+      setError(data.message || "Failed to load support tickets");
+      return [];
     } catch (err) {
       setError(err.message || "Unable to fetch support tickets");
+      return [];
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -76,28 +112,77 @@ const Reports = () => {
     fetchTickets();
   }, []);
 
-  const updateStatus = async (id, status) => {
+  useEffect(() => {
+    setReplyMessage("");
+  }, [selectedReport]);
+
+  const updateStatus = async (ticketDocId, status) => {
+    if (!ticketDocId) {
+      setError("Ticket document ID not found");
+      return;
+    }
+
+    setUpdatingStatus(true);
+    setError("");
     try {
-      const ticket = reports.find((r) => r.id === id);
-      if (!ticket) return;
-      const res = await fetch(`${API_BASE}/api/support/admin/update-ticket-status/${ticket.ticketId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status }),
-      });
+      const res = await fetch(
+        `${API_BASE}/api/support/admin/update-ticket-status/${ticketDocId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        }
+      );
       const data = await res.json();
       if (!data.success) throw new Error(data.message || "Failed to update status");
 
       setReports((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status } : r))
+        prev.map((r) =>
+          getTicketDocId(r) === ticketDocId ? { ...r, status } : r
+        )
       );
-      setSelectedReport((prev) =>
-        prev ? { ...prev, status } : null
-      );
+
+      const tickets = await fetchTickets(true);
+      const updated = tickets.find((t) => getTicketDocId(t) === ticketDocId);
+      if (updated) setSelectedReport(updated);
     } catch (err) {
       setError(err.message || "Unable to update ticket status");
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const replyToTicket = async () => {
+    if (!selectedReport || !replyMessage.trim()) return;
+
+    const ticketDocId = getTicketDocId(selectedReport);
+    if (!ticketDocId) {
+      setError("Ticket document ID not found");
+      return;
+    }
+
+    setReplying(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/support/admin/reply-ticket/${ticketDocId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: replyMessage.trim() }),
+        }
+      );
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Failed to send reply");
+
+      setReplyMessage("");
+      const tickets = await fetchTickets(true);
+      const updated = tickets.find((t) => getTicketDocId(t) === ticketDocId);
+      if (updated) setSelectedReport(updated);
+    } catch (err) {
+      setError(err.message || "Unable to send reply");
+    } finally {
+      setReplying(false);
     }
   };
 
@@ -125,7 +210,8 @@ const Reports = () => {
                 Support Tickets
               </h1>
               <p className="text-sm text-gray-500">
-                Manage customer support issues
+                Manage customer support issues · {reports.length} ticket
+                {reports.length !== 1 ? "s" : ""}
               </p>
             </div>
 
@@ -158,9 +244,11 @@ const Reports = () => {
               className="border rounded-lg px-4 py-2"
             >
               <option value="all">All Status</option>
-              <option value="pending">Open</option>
-              <option value="in-progress">In Process</option>
-              <option value="resolved">Resolved</option>
+              {STATUS_OPTIONS.map((status) => (
+                <option key={status} value={normalizeStatusKey(status)}>
+                  {status}
+                </option>
+              ))}
             </select>
 
             <select
@@ -187,8 +275,9 @@ const Reports = () => {
             <table className="w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
+                  <th className="p-4 text-left">Ticket ID</th>
                   <th className="p-4 text-left">User</th>
-                  <th className="p-4 text-left">role</th>
+                  <th className="p-4 text-left">Role</th>
                   <th className="p-4 text-left">Issue</th>
                   <th className="p-4 text-center">Status</th>
                   <th className="p-4 text-center">Date</th>
@@ -198,17 +287,26 @@ const Reports = () => {
               <tbody>
                 {filteredReports.length ? (
                   filteredReports.map((r) => (
-                    <tr key={r.id} className="border-t hover:bg-gray-50">
+                    <tr key={getTicketDocId(r)} className="border-t hover:bg-gray-50">
+                      <td className="p-4 font-medium text-gray-800">
+                        {r.ticketId || "-"}
+                      </td>
                       <td className="p-4">
-                        <p className="font-medium">{r.userDetails?.name || r.username || r.userId}</p>
+                        <p className="font-medium">
+                          {r.userDetails?.name || "-"}
+                        </p>
                         <p className="text-xs text-gray-500">
-                          {r.userDetails?.email || r.contactEmail || "-"}
+                          {r.userDetails?.email ||
+                            r.userDetails?.phone ||
+                            "-"}
                         </p>
                       </td>
-                      <td className="p-4">{r.userDetails?.role || "-"}</td>
-                      <td className="p-4">{r.issueType || r.issueCategory}</td>
-                      <td className="p-4 text-center capitalize">
-                        {String(r.status || "").toLowerCase().replace("-", " ")}
+                      <td className="p-4 capitalize">
+                        {r.userDetails?.role || "-"}
+                      </td>
+                      <td className="p-4">{r.issueType || "-"}</td>
+                      <td className="p-4 text-center">
+                        <StatusBadge status={r.status} />
                       </td>
                       <td className="p-4 text-center">
                         {formatDate(r.createdAt)}
@@ -225,13 +323,13 @@ const Reports = () => {
                   ))
                 ) : loading ? (
                   <tr>
-                    <td colSpan="5" className="p-12 text-center text-gray-500">
+                    <td colSpan="7" className="p-12 text-center text-gray-500">
                       Loading tickets...
                     </td>
                   </tr>
                 ) : (
                   <tr>
-                    <td colSpan="5" className="p-12 text-center">
+                    <td colSpan="7" className="p-12 text-center">
                       <FileText size={40} className="mx-auto text-gray-300 mb-2" />
                       <p className="text-gray-500">No reports found</p>
                     </td>
@@ -247,8 +345,14 @@ const Reports = () => {
       {selectedReport && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl">
-            <div className="p-5 border-b flex justify-between">
-              <h2 className="font-semibold">Ticket Status</h2>
+            <div className="p-5 border-b flex justify-between items-center">
+              <div>
+                <h2 className="font-semibold">Ticket Details</h2>
+                <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
+                  <span>{selectedReport.ticketId}</span>
+                  <StatusBadge status={selectedReport.status} />
+                </p>
+              </div>
               <button onClick={() => setSelectedReport(null)}>
                 <X />
               </button>
@@ -258,13 +362,13 @@ const Reports = () => {
               <div className="grid grid-cols-1 gap-4">
                 <div className="bg-red-50 p-4 rounded-xl">
                   <p className="text-sm font-medium">Ticket ID</p>
-                  <p className="text-sm text-gray-600">#{selectedReport.ticketId || selectedReport.reportId}</p>
+                  <p className="text-sm text-gray-600">{selectedReport.ticketId || "-"}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 p-4 rounded-xl">
                     <p className="text-sm font-medium">Issue Type</p>
-                    <p className="text-sm text-gray-600">{selectedReport.issueType || selectedReport.issueCategory || "-"}</p>
+                    <p className="text-sm text-gray-600">{selectedReport.issueType || "-"}</p>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-xl">
                     <p className="text-sm font-medium">Created At</p>
@@ -275,10 +379,19 @@ const Reports = () => {
                 <div className="bg-gray-50 p-4 rounded-xl overflow-auto max-h-48">
                   <p className="text-sm font-medium mb-3">User Details</p>
                   <div className="space-y-2 text-sm text-gray-700">
-                    {Object.entries(selectedReport.userDetails || { userId: selectedReport.userId }).map(([key, value]) => (
-                      <div key={key} className="flex justify-between gap-4 rounded-lg bg-white px-3 py-2 border border-gray-100">
-                        <span className="text-gray-500 capitalize">{key.replace(/([A-Z])/g, " $1")}</span>
-                        <span className="font-medium text-gray-800 text-right break-words">{String(value || "-")}</span>
+                    {Object.entries(
+                      selectedReport.userDetails || { userId: selectedReport.userId }
+                    ).map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="flex justify-between gap-4 rounded-lg bg-white px-3 py-2 border border-gray-100"
+                      >
+                        <span className="text-gray-500 capitalize">
+                          {key.replace(/([A-Z])/g, " $1")}
+                        </span>
+                        <span className="font-medium text-gray-800 text-right break-words">
+                          {value == null || value === "" ? "-" : String(value)}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -308,9 +421,14 @@ const Reports = () => {
                 <div className="space-y-2">
                   {Array.isArray(selectedReport.timeline) && selectedReport.timeline.length > 0 ? (
                     selectedReport.timeline.map((event, index) => (
-                      <div key={index} className="flex items-center justify-between rounded-xl border p-3 bg-white">
-                        <span className="text-sm text-gray-700 capitalize">{String(event.status || "").replace("-", " ")}</span>
-                        <span className="text-xs text-gray-500">{formatDate(event.time)}</span>
+                      <div
+                        key={index}
+                        className="flex items-center justify-between rounded-xl border p-3 bg-white"
+                      >
+                        <StatusBadge status={event.status} />
+                        <span className="text-xs text-gray-500">
+                          {formatDate(event.time)}
+                        </span>
                       </div>
                     ))
                   ) : (
@@ -320,29 +438,63 @@ const Reports = () => {
               </div>
 
               <div>
+                <h3 className="font-medium mb-2">Replies</h3>
+                <div className="space-y-2">
+                  {Array.isArray(selectedReport.replies) &&
+                  selectedReport.replies.length > 0 ? (
+                    selectedReport.replies.map((reply, index) => (
+                      <div
+                        key={index}
+                        className="rounded-xl border p-3 bg-white"
+                      >
+                        <p className="text-sm text-gray-700">{reply.message}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {reply.repliedBy || "Admin"} ·{" "}
+                          {formatDate(reply.repliedAt)}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-400">No replies yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
                 <h3 className="font-medium mb-2">Update Status</h3>
                 <select
-                  value={selectedReport.status}
-                  onChange={(e) => updateStatus(selectedReport.id, e.target.value)}
-                  className="w-full border rounded-lg px-4 py-2"
+                  value={selectedReport.status || ""}
+                  onChange={(e) =>
+                    updateStatus(getTicketDocId(selectedReport), e.target.value)
+                  }
+                  disabled={updatingStatus}
+                  className="w-full border rounded-lg px-4 py-2 disabled:opacity-50"
                 >
-                  <option value="pending">Open</option>
-                  <option value="in-progress">In Process</option>
-                  <option value="resolved">Resolved</option>
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <button
-                onClick={() => {
-                  const email = selectedReport.userDetails?.email || selectedReport.contactEmail || "";
-                  const subject = encodeURIComponent(`Re: ${selectedReport.ticketId || selectedReport.reportId}`);
-                  const body = encodeURIComponent(`Hello ${selectedReport.userDetails?.name || ""},\n\nI am writing regarding your support ticket ${selectedReport.ticketId || selectedReport.reportId}.\n\nIssue Type: ${selectedReport.issueType || selectedReport.issueCategory || "-"}\nDescription: ${selectedReport.description || "-"}\n\nPlease reply with any additional details or confirmation.\n\nThanks,\n`);
-                  window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_blank");
-                }}
-                className="w-full bg-red-600 text-white py-3 rounded-xl"
-              >
-                Reply via Email
-              </button>
+              <div>
+                <h3 className="font-medium mb-2">Reply to Ticket</h3>
+                <textarea
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  placeholder="We are investigating your issue."
+                  rows={3}
+                  className="w-full border rounded-lg px-4 py-2 resize-none"
+                />
+                <button
+                  onClick={replyToTicket}
+                  disabled={replying || !replyMessage.trim()}
+                  className="w-full mt-2 bg-red-600 text-white py-3 rounded-xl disabled:opacity-50"
+                >
+                  {replying ? "Sending..." : "Send Reply"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

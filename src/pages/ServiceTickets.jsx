@@ -890,7 +890,7 @@ const ServiceTickets = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`${API_BASE_URL}/api/servicebookings/all-bookings`);
+      const res = await fetch(`${API_BASE_URL}/api/servicebookings//all-Admin_bookings`);
       if (!res.ok) throw new Error(`API Error: ${res.status}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
