@@ -79,6 +79,7 @@ const normalizeDispute = (item) => {
     resolvedAt: dispute.resolvedAt,
     resolution: dispute.resolution,
     adminRemark: dispute.adminRemark,
+    remarks: dispute.remarks || {},
   };
 };
 
@@ -94,6 +95,7 @@ const AdminDisputePage = () => {
   const [editStatus, setEditStatus] = useState("raised");
   const [editRemark, setEditRemark] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [remarksOpen, setRemarksOpen] = useState(false);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -124,6 +126,7 @@ const AdminDisputePage = () => {
     if (selectedDispute) {
       setEditStatus(selectedDispute.status);
       setEditRemark(selectedDispute.adminRemark || "");
+      setRemarksOpen(false);
     }
   }, [selectedDispute]);
 
@@ -316,11 +319,26 @@ const AdminDisputePage = () => {
       {selectedDispute && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b flex justify-between">
-              <h2 className="font-semibold">Dispute Details</h2>
-              <button onClick={() => setSelectedDispute(null)}>
-                <X />
-              </button>
+            <div className="p-5 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="space-y-2">
+                <h2 className="font-semibold">Dispute Details</h2>
+                <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getStatusStyle(selectedDispute.status)}`}>
+                  {formatStatus(selectedDispute.status)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRemarksOpen((prev) => !prev)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg"
+                >
+                  Remarks
+                  <span>{remarksOpen ? "▲" : "▼"}</span>
+                </button>
+                <button onClick={() => setSelectedDispute(null)}>
+                  <X />
+                </button>
+              </div>
             </div>
 
             <div className="p-5 space-y-4">
@@ -392,9 +410,31 @@ const AdminDisputePage = () => {
               )}
 
               {selectedDispute.adminRemark && (
-                <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg whitespace-pre-wrap break-words">
                   <strong>Admin Remark:</strong> {selectedDispute.adminRemark}
                 </p>
+              )}
+
+              {selectedDispute.remarks && Object.keys(selectedDispute.remarks).length > 0 && remarksOpen && (
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                  <div className="space-y-2 text-sm">
+                    {Object.entries(selectedDispute.remarks).map(([status, remark]) => (
+                      <div key={status} className="rounded-lg bg-white p-3 border border-gray-200 flex justify-between items-start gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">
+                            {formatStatus(status)}
+                          </p>
+                          <p className="text-gray-700 whitespace-pre-wrap break-words">
+                            {remark || "No remark"}
+                          </p>
+                        </div>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${getStatusStyle(status)}`}>
+                          {formatStatus(status)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               <div className="flex items-center gap-2 text-xs text-gray-500">

@@ -54,6 +54,7 @@ const Reports = () => {
   const [replyMessage, setReplyMessage] = useState("");
   const [replying, setReplying] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [selectedReplyIndex, setSelectedReplyIndex] = useState(0);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -114,6 +115,7 @@ const Reports = () => {
 
   useEffect(() => {
     setReplyMessage("");
+    setSelectedReplyIndex(0);
   }, [selectedReport]);
 
   const updateStatus = async (ticketDocId, status) => {
@@ -438,22 +440,50 @@ const Reports = () => {
               </div>
 
               <div>
-                <h3 className="font-medium mb-2">Replies</h3>
+                <h3 className="font-medium mb-2">Admin Replies</h3>
                 <div className="space-y-2">
                   {Array.isArray(selectedReport.replies) &&
                   selectedReport.replies.length > 0 ? (
-                    selectedReport.replies.map((reply, index) => (
-                      <div
-                        key={index}
-                        className="rounded-xl border p-3 bg-white"
+                    <>
+                      <select
+                        value={selectedReplyIndex}
+                        onChange={(e) => setSelectedReplyIndex(Number(e.target.value))}
+                        className="w-full border rounded-lg px-3 py-2"
                       >
-                        <p className="text-sm text-gray-700">{reply.message}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {reply.repliedBy || "Admin"} ·{" "}
-                          {formatDate(reply.repliedAt)}
-                        </p>
-                      </div>
-                    ))
+                        {selectedReport.replies.map((reply, idx) => {
+                          const by = (reply.repliedBy || "Admin").toString();
+                          const isAdmin = /admin/i.test(by);
+                          const short = String(reply.message || "").slice(0, 60);
+                          return (
+                            <option key={idx} value={idx}>
+                              {isAdmin ? "Admin: " : `${by}: `}{short}{reply.message && reply.message.length > 60 ? '...' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+
+                      {/* selected reply display */}
+                      {selectedReport.replies[selectedReplyIndex] ? (
+                        (() => {
+                          const reply = selectedReport.replies[selectedReplyIndex];
+                          const by = reply.repliedBy || "Admin";
+                          const isAdmin = /admin/i.test(by);
+                          return (
+                            <div className="rounded-xl border p-3 bg-white mt-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-medium ${isAdmin ? 'text-red-600' : 'text-gray-700'}`}>
+                                    {isAdmin ? 'Admin Reply' : String(by)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">· {formatDate(reply.repliedAt)}</span>
+                                </div>
+                              </div>
+                              <p className="text-sm text-gray-700 mt-2">{reply.message}</p>
+                            </div>
+                          );
+                        })()
+                      ) : null}
+                    </>
                   ) : (
                     <p className="text-sm text-gray-400">No replies yet.</p>
                   )}
