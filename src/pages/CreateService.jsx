@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { Plus, Car, Wrench, X, Upload, Folder, Trash2, Edit2, Search, Filter, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { Plus, X, Folder, Trash2, Edit2, Search, ChevronDown, ChevronUp } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import Toast from "../components/Toast.jsx";
@@ -7,12 +7,92 @@ import { useToast } from "../hooks/useToast.js";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+const VEHICLE_ORDER_GROUPS = [
+  ["scooter"],
+  ["bike", "bicycle", "2-wheeler"],
+  ["car", "cars"],
+  ["3-wheeler", "three", "three-wheeler", "three wheeler"],
+  ["pickup", "van"],
+  ["tractor", "tractors"],
+  ["bus"],
+  ["truck"],
+];
+
+const getOrderIndex = (name = "") => {
+  const n = name.toLowerCase();
+  for (let i = 0; i < VEHICLE_ORDER_GROUPS.length; i++) {
+    for (const kw of VEHICLE_ORDER_GROUPS[i]) {
+      if (n.includes(kw)) return i;
+    }
+  }
+  return VEHICLE_ORDER_GROUPS.length;
+};
+
+const sortVehicles = (vehicles) =>
+  [...vehicles].sort((a, b) => getOrderIndex(a.name) - getOrderIndex(b.name));
+
+const CategoryCardSkeleton = () => (
+  <div className="bg-white rounded-xl border shadow-sm overflow-hidden animate-pulse">
+    <div className="p-4 flex items-center justify-between">
+      <div className="flex items-center gap-3 flex-1">
+        <div className="w-12 h-12 bg-gray-200 rounded-lg" />
+        <div className="space-y-2 flex-1">
+          <div className="h-5 bg-gray-200 rounded w-1/3" />
+          <div className="h-4 bg-gray-100 rounded w-20" />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <div className="w-8 h-8 bg-gray-100 rounded-lg" />
+        <div className="w-8 h-8 bg-gray-100 rounded-lg" />
+      </div>
+    </div>
+  </div>
+);
+
+const ServiceListSkeleton = () => (
+  <div className="p-4 border-t bg-gray-50/50 space-y-4 animate-pulse">
+    {[...Array(3)].map((_, i) => (
+      <div key={i} className="border rounded-lg p-4 bg-white">
+        <div className="flex items-center gap-3 mb-3 border-b pb-2">
+          <div className="w-8 h-8 bg-gray-200 rounded" />
+          <div className="h-4 bg-gray-200 rounded flex-1 max-w-[200px]" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[...Array(2)].map((_, j) => (
+            <div key={j} className="bg-gray-50 p-3 rounded border flex gap-3">
+              <div className="w-10 h-10 bg-gray-200 rounded" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-3/4" />
+                <div className="h-3 bg-gray-100 rounded w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const ListItemSkeleton = () => (
+  <div className="flex items-center justify-between border p-2 rounded-lg animate-pulse">
+    <div className="h-4 bg-gray-200 rounded w-1/3" />
+    <div className="flex gap-2">
+      <div className="w-8 h-8 bg-gray-100 rounded" />
+      <div className="w-8 h-8 bg-gray-100 rounded" />
+    </div>
+  </div>
+);
+
 const CreateService = () => {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [activeTab, setActiveTab] = useState("vehicle");
   const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingVehicleIds, setLoadingVehicleIds] = useState(() => new Set());
   const [error, setError] = useState(null);
+  const fetchingVehicleIds = useRef(new Set());
+  const loadedVehicleIdsRef = useRef(new Set());
   const { toasts, addToast } = useToast();
 
   // Dropdown state: card ID track karne ke liye
@@ -32,6 +112,7 @@ const CreateService = () => {
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
+  const [itemDiscountPrice, setItemDiscountPrice] = useState("");
   const [itemDesc, setItemDesc] = useState("");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(null);
@@ -66,91 +147,136 @@ const CreateService = () => {
     setExpandedId(expandedId === id ? null : id);
   };
 
-  const fetchAllData = async () => {
-    setLoading(true);
-    setError(null);
+  const setVehicleLoading = useCallback((vehicleId, isLoading) => {
+    setLoadingVehicleIds((prev) => {
+      const next = new Set(prev);
+      if (isLoading) next.add(vehicleId);
+      else next.delete(vehicleId);
+      return next;
+    });
+  }, []);
+
+  const fetchVehicleDetails = useCallback(async (vehicleId, force = false) => {
+    if (!vehicleId || fetchingVehicleIds.current.has(vehicleId)) return;
+    if (!force && loadedVehicleIdsRef.current.has(vehicleId)) return;
+
+    fetchingVehicleIds.current.add(vehicleId);
+    setVehicleLoading(vehicleId, true);
+
     try {
-      if (activeTab === "vehicle") {
-        const vRes = await fetch(`${API_BASE_URL}/api/client/vehicles`);
-        if (vRes.status === 429) throw new Error("Rate limit exceeded. Please wait.");
-        const vehicles = await vRes.json();
+      const sRes = await fetch(`${API_BASE_URL}/api/client/vehicle/${vehicleId}/services`);
+      if (sRes.status === 429) throw new Error("Rate limit exceeded. Please wait.");
+      const services = await sRes.json();
 
-        const vehicleData = await Promise.all(vehicles.map(async (v) => {
-          const sRes = await fetch(`${API_BASE_URL}/api/client/vehicle/${v.id}/services`);
-          const services = await sRes.json();
-
-          const servicesWithTypes = await Promise.all(services.map(async (s) => {
-            try {
-              const tRes = await fetch(`${API_BASE_URL}/api/client/vehicle/${v.id}/service/${s.id}/types`);
-              const types = await tRes.json();
-              return { ...s, types: Array.isArray(types) ? types : [] };
-            } catch {
-              return { ...s, types: [] };
-            }
-          }));
-
-          return {  
-            id: v.id,
-            name: v.name,
-            icon: v.iconUrl || v.icon || v.icon_url || "",
-            items: servicesWithTypes
-          };
-        }));
-        // order vehicles according to preferred sequence
-        const orderGroups = [
-          ["scooter"],
-          ["bike", "bicycle","2-wheeler"],
-          ["car", "cars"],
-          ["3-wheeler","3-wheeler", "three", "three-wheeler", "three wheeler"],
-          ["pickup", "van"],
-          ["tractor", "tractors"],
-          ["bus", "Bus", "BUS", "Bus"],
-          ["truck"],
-        ];
-
-        const getOrderIndex = (name = "") => {
-          const n = name.toLowerCase();
-          for (let i = 0; i < orderGroups.length; i++) {
-            for (const kw of orderGroups[i]) {
-              if (n.includes(kw)) return i;
-            }
+      const servicesWithTypes = await Promise.all(
+        (Array.isArray(services) ? services : []).map(async (s) => {
+          try {
+            const tRes = await fetch(
+              `${API_BASE_URL}/api/client/vehicle/${vehicleId}/service/${s.id}/types`
+            );
+            const types = await tRes.json();
+            return { ...s, types: Array.isArray(types) ? types : [] };
+          } catch {
+            return { ...s, types: [] };
           }
-          return orderGroups.length; // put unknowns at the end
-        };
+        })
+      );
 
-        vehicleData.sort((a, b) => {
-          return getOrderIndex(a.name) - getOrderIndex(b.name);
-        });
+      loadedVehicleIdsRef.current.add(vehicleId);
+      setCategories((prev) => ({
+        ...prev,
+        vehicle: prev.vehicle.map((v) =>
+          v.id === vehicleId
+            ? { ...v, items: servicesWithTypes, detailsLoaded: true }
+            : v
+        ),
+      }));
+    } catch (err) {
+      addToast(err.message || "Failed to load services", "error");
+    } finally {
+      fetchingVehicleIds.current.delete(vehicleId);
+      setVehicleLoading(vehicleId, false);
+    }
+  }, [addToast, setVehicleLoading]);
 
-        setCategories(prev => ({ ...prev, vehicle: vehicleData }));
-      } else {
-        const eRes = await fetch(`${API_BASE_URL}/api/client/equipments`);
-        const eData = await eRes.json();
+  const fetchVehicles = useCallback(async () => {
+    setInitialLoading(true);
+    setError(null);
+    loadedVehicleIdsRef.current = new Set();
+    try {
+      const vRes = await fetch(`${API_BASE_URL}/api/client/vehicles`);
+      if (vRes.status === 429) throw new Error("Rate limit exceeded. Please wait.");
+      const vehicles = await vRes.json();
 
-        const equipments = Array.isArray(eData) ? eData : eData.data || [];
+      const vehicleData = sortVehicles(
+        (Array.isArray(vehicles) ? vehicles : []).map((v) => ({
+          id: v.id,
+          name: v.name,
+          icon: v.iconUrl || v.icon || v.icon_url || "",
+          items: [],
+          detailsLoaded: false,
+        }))
+      );
 
-        setCategories(prev => ({
-          ...prev,
-          equipment: [{
-            id: "all-equip",
-            name: "General Equipment",
-            items: equipments.map(e => ({
-              id: e.id,
-              name: e.name,
-              icon: e.iconUrl,
-              types: []
-            }))
-          }]
-        }));
-      }
+      setCategories((prev) => ({ ...prev, vehicle: vehicleData }));
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchAllData(); }, [activeTab]);
+  const fetchEquipment = useCallback(async () => {
+    setInitialLoading(true);
+    setError(null);
+    try {
+      const eRes = await fetch(`${API_BASE_URL}/api/client/equipments`);
+      const eData = await eRes.json();
+      const equipments = Array.isArray(eData) ? eData : eData.data || [];
+
+      setCategories((prev) => ({
+        ...prev,
+        equipment: [{
+          id: "all-equip",
+          name: "General Equipment",
+          items: equipments.map((e) => ({
+            id: e.id,
+            name: e.name,
+            icon: e.iconUrl,
+            types: [],
+          })),
+        }],
+      }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setInitialLoading(false);
+    }
+  }, []);
+
+  const refreshCurrentTab = useCallback(async (vehicleId = null) => {
+    if (activeTab === "vehicle") {
+      await fetchVehicles();
+      if (vehicleId) {
+        loadedVehicleIdsRef.current.delete(vehicleId);
+        await fetchVehicleDetails(vehicleId, true);
+      }
+    } else {
+      await fetchEquipment();
+    }
+  }, [activeTab, fetchVehicles, fetchEquipment, fetchVehicleDetails]);
+
+  useEffect(() => {
+    setExpandedId(null);
+    if (activeTab === "vehicle") fetchVehicles();
+    else fetchEquipment();
+  }, [activeTab, fetchVehicles, fetchEquipment]);
+
+  useEffect(() => {
+    if (activeTab === "vehicle" && expandedId) {
+      fetchVehicleDetails(expandedId);
+    }
+  }, [activeTab, expandedId, fetchVehicleDetails]);
 
   // Brands API helpers
   const fetchBrands = async (vehicleId) => {
@@ -564,7 +690,7 @@ const CreateService = () => {
       return addToast("Icon/Image is required", "warning");
     }
     try {
-      setLoading(true);
+      setSubmitting(true);
       if (modalMode === "vehicle") {
         const vFormData = new FormData();
         vFormData.append("name", categoryName.trim());
@@ -579,7 +705,7 @@ const CreateService = () => {
 
         setShowModal(false);
         resetModal();
-        fetchAllData();
+        await refreshCurrentTab();
       } else if (modalMode === "editVehicle") {
         const updateData = new FormData();
         updateData.append("name", categoryName.trim());
@@ -594,7 +720,7 @@ const CreateService = () => {
 
         setShowModal(false);
         resetModal();
-        fetchAllData();
+        await refreshCurrentTab(editingVehicleId);
       } else if (modalMode === "editService") {
         const updateFormData = new FormData();
         updateFormData.append("name", itemName.trim());
@@ -612,11 +738,12 @@ const CreateService = () => {
 
         setShowModal(false);
         resetModal();
-        fetchAllData();
+        await refreshCurrentTab(editingServiceCategoryId);
       } else if (modalMode === "editType") {
         const updateTypeFormData = new FormData();
         updateTypeFormData.append("name", itemName.trim());
         updateTypeFormData.append("price", itemPrice);
+        updateTypeFormData.append("discountPrice", itemDiscountPrice || 0);
         updateTypeFormData.append("description", itemDesc);
         if (iconFile) updateTypeFormData.append("image", iconFile);
       
@@ -632,7 +759,7 @@ const CreateService = () => {
 
         setShowModal(false);
         resetModal();
-        fetchAllData();
+        await refreshCurrentTab(editingTypeCategoryId);
       } else if (modalMode === "editEquipment") {
         const updateEquipmentData = new FormData();
         updateEquipmentData.append("name", itemName.trim());
@@ -650,11 +777,12 @@ const CreateService = () => {
 
         setShowModal(false);
         resetModal();
-        fetchAllData();
+        await refreshCurrentTab();
       } else if (modalMode === "type") {
         const formData = new FormData();
         formData.append("name", itemName.trim());
         formData.append("price", itemPrice);
+        formData.append("discountPrice", itemDiscountPrice || 0);
         formData.append("description", itemDesc);
         formData.append("image", iconFile);
 
@@ -666,7 +794,7 @@ const CreateService = () => {
         if (response.ok) {
           setShowModal(false);
           resetModal();
-          fetchAllData();
+          await refreshCurrentTab(selectedCategoryId);
         }
       } else {
         const formData = new FormData();
@@ -681,13 +809,14 @@ const CreateService = () => {
         if (response.ok) {
           setShowModal(false);
           resetModal();
-          fetchAllData();
+          const refreshId = activeTab === "vehicle" ? selectedCategoryId : null;
+          await refreshCurrentTab(refreshId);
         }
       }
     } catch (error) {
       addToast("Action failed.", "error");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -702,6 +831,7 @@ const CreateService = () => {
     setCategoryName("");
     setItemName("");
     setItemPrice("");
+    setItemDiscountPrice("");
     setItemDesc("");
     setSelectedCategoryId("");
     setSelectedServiceId("");
@@ -737,6 +867,7 @@ const CreateService = () => {
     setEditingTypeCategoryId(categoryId);
     setItemName(type.name || "");
     setItemPrice(type.price || "");
+    setItemDiscountPrice(type.discountPrice ?? type.discount_price ?? 0);
     setItemDesc(type.description || "");
     setIconPreview(type.image || type.image_url || null); 
     setShowModal(true);
@@ -763,65 +894,71 @@ const CreateService = () => {
   const handleDeleteVehicle = async (vehicleId) => {
     if (!window.confirm("Delete this vehicle and all its services?")) return;
     try {
-      setLoading(true);
+      setSubmitting(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete vehicle");
       const data = await res.json().catch(() => ({}));
       addToast(data.message || "Vehicle deleted", "success");
-      fetchAllData();
+      if (expandedId === vehicleId) setExpandedId(null);
+      await refreshCurrentTab();
     } catch (err) {
       addToast("Delete failed.", "error");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleDeleteService = async (vehicleId, serviceId) => {
     if (!window.confirm("Delete this service?")) return;
     try {
-      setLoading(true);
+      setSubmitting(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/service/${serviceId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete service");
       const data = await res.json().catch(() => ({}));
       addToast(data.message || "Service deleted", "success");
-      fetchAllData();
+      await refreshCurrentTab(vehicleId);
     } catch (err) {
       addToast("Delete failed.", "error");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleDeleteType = async (vehicleId, serviceId, typeId) => {
     if (!window.confirm("Delete this service type?")) return;
     try {
-      setLoading(true);
+      setSubmitting(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/service/${serviceId}/type/${typeId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete service type");
       const data = await res.json().catch(() => ({}));
       addToast(data.message || "Service type deleted", "success");
-      fetchAllData();
+      await refreshCurrentTab(vehicleId);
     } catch (err) {
       addToast("Delete failed.", "error");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleDeleteEquipment = async (equipmentId) => {
     if (!window.confirm("Delete this equipment?")) return;
     try {
-      setLoading(true);
+      setSubmitting(true);
       const res = await fetch(`${API_BASE_URL}/api/admin/equipment/${equipmentId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete equipment");
       const data = await res.json().catch(() => ({}));
       addToast(data.message || "Equipment deleted", "success");
-      fetchAllData();
+      await refreshCurrentTab();
     } catch (err) {
       addToast("Delete failed.", "error");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
+  };
+
+  const handleVehicleSelect = (vehicleId) => {
+    setSelectedCategoryId(vehicleId);
+    if (vehicleId) fetchVehicleDetails(vehicleId);
   };
 
   return (
@@ -865,7 +1002,14 @@ const CreateService = () => {
           {error && <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg border border-red-200">{error}</div>}
 
           <div className="space-y-4">
-            {categories[activeTab]?.map(category => (
+            {initialLoading ? (
+              [...Array(5)].map((_, i) => <CategoryCardSkeleton key={i} />)
+            ) : categories[activeTab]?.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 bg-white rounded-xl border">
+                No {activeTab} categories found.
+              </div>
+            ) : (
+            categories[activeTab]?.map(category => (
               <div key={category.id} className="bg-white rounded-xl border shadow-sm overflow-hidden">
                 {/* Accordion Header (Card click karne par toggle hoga) */}
                 <div
@@ -887,7 +1031,11 @@ const CreateService = () => {
                     </div>
                     <h3 className="text-lg font-bold text-gray-800">{category.name}</h3>
                     <span className="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-500">
-                      {category.items.length} Services
+                      {category.detailsLoaded || activeTab === "equipment"
+                        ? `${category.items?.length ?? 0} Services`
+                        : loadingVehicleIds.has(category.id)
+                          ? "Loading..."
+                          : "Expand to load"}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -934,6 +1082,9 @@ const CreateService = () => {
 
                 {/* Accordion Body (Expanded hone par hi dikhega) */}
                 {expandedId === category.id && (
+                  loadingVehicleIds.has(category.id) || (activeTab === "vehicle" && !category.detailsLoaded) ? (
+                    <ServiceListSkeleton />
+                  ) : (
                   <div className="p-4 border-t bg-gray-50/50 space-y-4 animate-in fade-in slide-in-from-top-2">
                     {category.items.length === 0 ? (
                       <p className="text-center text-gray-400 text-sm py-4">No services added yet.</p>
@@ -983,7 +1134,10 @@ const CreateService = () => {
                                       <div className="text-sm">
                                         <p className="font-bold text-gray-800">{type.name}</p>
                                         <p className="font-bold text-gray-800">{type.description}</p>
-                                        <p className="text-red-600 font-semibold">₹{type.price}</p>
+                                        <p className="text-red-600 font-semibold"> Original Price: ₹{type.price}</p>
+                                        {((type.discountPrice ?? type.discount_price) || 0) > 0 && (
+                                          <p className="text-sm font-medium text-green-600">Discount Price: ₹{type.discountPrice ?? type.discount_price}</p>
+                                        )}
                                       </div>
                                     </div>
                                     <button
@@ -1014,9 +1168,11 @@ const CreateService = () => {
                       </div>
                     )}
                   </div>
+                  )
                 )}
               </div>
-            ))}
+            ))
+            )}
           </div>
         </main>
       </div>
@@ -1047,27 +1203,46 @@ const CreateService = () => {
             <div className="space-y-4">
               {modalMode === "editType" ? (
                 <>
-                  <input
-                    type="text"
-                    placeholder="Type Name"
-                    className="w-full border p-2 rounded-lg"
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Price (e.g. 500)"
-                    className="w-full border p-2 rounded-lg"
-                    value={itemPrice}
-                    onChange={(e) => setItemPrice(e.target.value)}
-                  />
-                  <textarea
-                    placeholder="Description"
-                    className="w-full border p-2 rounded-lg"
-                    value={itemDesc}
-                    onChange={(e) => setItemDesc(e.target.value)}
-                    rows="3"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Type Name</label>
+                    <input
+                      type="text"
+                      placeholder="Type Name"
+                      className="w-full border p-2 rounded-lg"
+                      value={itemName}
+                      onChange={(e) => setItemName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Price</label>
+                    <input
+                      type="number"
+                      placeholder="Price (e.g. 500)"
+                      className="w-full border p-2 rounded-lg"
+                      value={itemPrice}
+                      onChange={(e) => setItemPrice(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Discount Price</label>
+                    <input
+                      type="number"
+                      placeholder="Discount Price (default 0)"
+                      className="w-full border p-2 rounded-lg"
+                      value={itemDiscountPrice}
+                      onChange={(e) => setItemDiscountPrice(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Description</label>
+                    <textarea
+                      placeholder="Description"
+                      className="w-full border p-2 rounded-lg"
+                      value={itemDesc}
+                      onChange={(e) => setItemDesc(e.target.value)}
+                      rows="3"
+                    />
+                  </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Upload Image</label>
                     <div className="flex items-center gap-4">
@@ -1105,19 +1280,34 @@ const CreateService = () => {
                 </>
               ) : modalMode === "type" ? (
                 <>
-                  <label className="block text-sm font-medium">Select Vehicle & Service</label>
-                  <select className="w-full border p-2 rounded-lg" onChange={(e) => setSelectedCategoryId(e.target.value)}>
-                    <option value="">Choose Vehicle</option>
-                    {categories.vehicle.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
-                  <select className="w-full border p-2 rounded-lg" onChange={(e) => setSelectedServiceId(e.target.value)}>
-                    <option value="">Choose Service</option>
-                    {categories.vehicle.find(v => v.id === selectedCategoryId)?.items.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                  <input type="number" placeholder="Price (e.g. 500)" className="w-full border p-2 rounded-lg" onChange={(e) => setItemPrice(e.target.value)} />
-                  <textarea placeholder="Description" className="w-full border p-2 rounded-lg" onChange={(e) => setItemDesc(e.target.value)} />
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Select Vehicle</label>
+                    <select className="w-full border p-2 rounded-lg" onChange={(e) => handleVehicleSelect(e.target.value)}>
+                      <option value="">Choose Vehicle</option>
+                      {categories.vehicle.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Select Service</label>
+                    <select className="w-full border p-2 rounded-lg" onChange={(e) => setSelectedServiceId(e.target.value)} disabled={!selectedCategoryId || loadingVehicleIds.has(selectedCategoryId)}>
+                      <option value="">{loadingVehicleIds.has(selectedCategoryId) ? "Loading services..." : "Choose Service"}</option>
+                      {categories.vehicle.find(v => v.id === selectedCategoryId)?.items.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Price</label>
+                    <input type="number" placeholder="Price (e.g. 500)" className="w-full border p-2 rounded-lg" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Discount Price</label>
+                    <input type="number" placeholder="Discount Price (default 0)" className="w-full border p-2 rounded-lg" value={itemDiscountPrice} onChange={(e) => setItemDiscountPrice(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Description</label>
+                    <textarea placeholder="Description" className="w-full border p-2 rounded-lg" value={itemDesc} onChange={(e) => setItemDesc(e.target.value)} />
+                  </div>
                 </>
               ) : modalMode === "vehicle" ? (
                 <input
@@ -1157,7 +1347,7 @@ const CreateService = () => {
                     <select
                       className="w-full border p-2 rounded-lg"
                       value={selectedCategoryId}
-                      onChange={(e) => setSelectedCategoryId(e.target.value)}
+                      onChange={(e) => handleVehicleSelect(e.target.value)}
                     >
                       <option value="">Choose Vehicle</option>
                       {categories.vehicle.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -1219,8 +1409,8 @@ const CreateService = () => {
               </div>
               )}
 
-              <button onClick={handleCreate} disabled={loading} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700">
-                {loading ? "Processing..." : modalMode === "editService" || modalMode === "editVehicle" || modalMode === "editType" || modalMode === "editEquipment" ? "Update" : "Submit"}
+              <button onClick={handleCreate} disabled={submitting} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 disabled:opacity-60">
+                {submitting ? "Processing..." : modalMode === "editService" || modalMode === "editVehicle" || modalMode === "editType" || modalMode === "editEquipment" ? "Update" : "Submit"}
               </button>
             </div>
           </div>
@@ -1258,7 +1448,9 @@ const CreateService = () => {
               <div>
                 <h4 className="font-semibold mb-2">Existing Brands</h4>
                 {brandLoading && brandsList.length === 0 ? (
-                  <p className="text-sm text-gray-500">Loading...</p>
+                  <div className="space-y-2">
+                    {[...Array(4)].map((_, i) => <ListItemSkeleton key={i} />)}
+                  </div>
                 ) : brandsList.length === 0 ? (
                   <p className="text-sm text-gray-400">No brands yet.</p>
                 ) : (
@@ -1335,7 +1527,9 @@ const CreateService = () => {
                     </div>
 
                     {modelLoading && modelsList.length === 0 ? (
-                      <p className="text-sm text-gray-500">Loading models...</p>
+                      <div className="space-y-2">
+                        {[...Array(3)].map((_, i) => <ListItemSkeleton key={i} />)}
+                      </div>
                     ) : modelsList.length === 0 ? (
                       <p className="text-sm text-gray-400">No models yet for this brand.</p>
                     ) : (
@@ -1414,7 +1608,9 @@ const CreateService = () => {
                     </div>
 
                     {fuelLoading && fuelsList.length === 0 ? (
-                      <p className="text-sm text-gray-500">Loading fuels...</p>
+                      <div className="space-y-2">
+                        {[...Array(3)].map((_, i) => <ListItemSkeleton key={i} />)}
+                      </div>
                     ) : fuelsList.length === 0 ? (
                       <p className="text-sm text-gray-400">No fuels yet for this model.</p>
                     ) : (
@@ -1475,7 +1671,9 @@ const CreateService = () => {
                     </div>
 
                     {engineCCLoading && engineCCList.length === 0 ? (
-                      <p className="text-sm text-gray-500">Loading engine CCs...</p>
+                      <div className="space-y-2">
+                        {[...Array(3)].map((_, i) => <ListItemSkeleton key={i} />)}
+                      </div>
                     ) : engineCCList.length === 0 ? (
                       <p className="text-sm text-gray-400">No engine CCs yet for this model.</p>
                     ) : (

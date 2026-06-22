@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search,
   X,
   FileText,
   RefreshCw,
   Clock,
+  ExternalLink,
+  UserCog,
 } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
@@ -61,14 +64,23 @@ const formatDate = (date) => {
 
 const normalizeDispute = (item) => {
   const dispute = item.dispute || {};
+  const reassignedMech = item.reassignedMechanic || {};
   return {
     id: item.bookingDocId || item.bookingId,
     bookingId: item.bookingId,
     disputeId: dispute.disputeId || "—",
     username: item.customer?.name || "Unknown",
     customerImage: item.customer?.image || "",
-    mechanicName: item.mechanic?.name || "—",
-    mechanicImage: item.mechanic?.image || "",
+    customerCode: item.customer?.customerID || item.customer?.customerId || "",
+    mechanicName: item.mechanic?.name || item.mechanic?.fullName || "—",
+    mechanicImage: item.mechanic?.image || item.mechanic?.profilePhoto || "",
+    mechanicId: item.mechanic?.userId || item.mechanic?.id || "",
+    mechanicCode: item.mechanic?.mechanicID || item.mechanic?.mechanicId || "",
+    reassignedMechanicName: reassignedMech.name || reassignedMech.fullName || "",
+    reassignedMechanicImage: reassignedMech.image || reassignedMech.profilePhoto || "",
+    reassignedMechanicId: reassignedMech.userId || reassignedMech.id || "",
+    reassignedMechanicCode: reassignedMech.mechanicId || "",
+    reassignedAt: item.reassignedMechanic && Object.keys(item.reassignedMechanic).length > 0 ? dispute.reassignedAt : null,
     serviceStatus: item.serviceStatus,
     reason: dispute.reason || "—",
     description: dispute.description || "",
@@ -79,11 +91,15 @@ const normalizeDispute = (item) => {
     resolvedAt: dispute.resolvedAt,
     resolution: dispute.resolution,
     adminRemark: dispute.adminRemark,
+    reassignDate: dispute.DateOfReassignment || dispute.dateOfReassignment || "",
+    reassignTime: dispute.TimeOfReassignment || dispute.timeOfReassignment || "",
     remarks: dispute.remarks || {},
   };
 };
 
 const AdminDisputePage = () => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [disputes, setDisputes] = useState([]);
   const [selectedDispute, setSelectedDispute] = useState(null);
@@ -96,6 +112,13 @@ const AdminDisputePage = () => {
   const [editRemark, setEditRemark] = useState("");
   const [updating, setUpdating] = useState(false);
   const [remarksOpen, setRemarksOpen] = useState(false);
+  const [mechanics, setMechanics] = useState([]);
+  const [reassignMechanicId, setReassignMechanicId] = useState("");
+  const [reassignRemark, setReassignRemark] = useState("");
+  const [reassignDate, setReassignDate] = useState("");
+  const [reassignTime, setReassignTime] = useState("");
+  const [reassigning, setReassigning] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -120,13 +143,45 @@ const AdminDisputePage = () => {
 
   useEffect(() => {
     fetchDisputes();
+    fetchMechanics();
   }, []);
+
+  useEffect(() => {
+    const bookingIdParam = searchParams.get("bookingId");
+    if (!bookingIdParam || disputes.length === 0) return;
+
+    const match = disputes.find((d) => d.bookingId === bookingIdParam);
+    if (match) {
+      setSelectedDispute(match);
+      setSearch(bookingIdParam);
+    }
+
+    setSearchParams({}, { replace: true });
+  }, [disputes, searchParams, setSearchParams]);
+
+  const fetchMechanics = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/mechanics`);
+      if (!res.ok) throw new Error(`API Error: ${res.status}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setMechanics(data.data);
+      }
+    } catch (err) {
+      console.error("Unable to fetch mechanics:", err);
+    }
+  };
 
   useEffect(() => {
     if (selectedDispute) {
       setEditStatus(selectedDispute.status);
       setEditRemark(selectedDispute.adminRemark || "");
       setRemarksOpen(false);
+      setReassignMechanicId("");
+      setReassignRemark("");
+      setReassignDate(selectedDispute.reassignDate || "");
+      setReassignTime(selectedDispute.reassignTime || "");
+      setSuccessMessage("");
     }
   }, [selectedDispute]);
 
@@ -134,6 +189,7 @@ const AdminDisputePage = () => {
     if (!selectedDispute) return;
     setUpdating(true);
     setError("");
+    setSuccessMessage("");
     try {
       const res = await fetch(
         `${API_BASE}/api/servicebookings/admin/update-dispute-status/${selectedDispute.id}`,
@@ -160,12 +216,71 @@ const AdminDisputePage = () => {
         prev.map((d) => (d.id === selectedDispute.id ? updated : d))
       );
       setSelectedDispute(updated);
+      setSuccessMessage("Dispute status updated successfully");
     } catch (err) {
       setError(err.message || "Unable to update dispute status");
     } finally {
       setUpdating(false);
     }
   };
+
+  const reassignMechanic = async () => {
+    if (!selectedDispute) return;
+    if (!reassignMechanicId.trim()) {
+      setError("Please select a mechanic to reassign");
+      return;
+    }
+
+    setReassigning(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/servicebookings/admin/reassign/${selectedDispute.bookingId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mechanicId: reassignMechanicId,
+            adminRemark: reassignRemark,
+            DateOfReassignment: reassignDate,
+            TimeOfReassignment: reassignTime,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || "Failed to reassign mechanic");
+      }
+
+      const selectedMech = mechanics.find(
+        (m) => (m.id || m.userId) === reassignMechanicId
+      );
+      const updated = {
+        ...selectedDispute,
+        mechanicName: selectedMech?.fullName || selectedMech?.name || selectedDispute.mechanicName,
+        mechanicId: reassignMechanicId,
+        mechanicCode:
+          selectedMech?.mechanicId ||
+          selectedMech?.kyc?.mechanicId ||
+          selectedDispute.mechanicCode,
+        reassignDate,
+        reassignTime,
+      };
+      setDisputes((prev) =>
+        prev.map((d) => (d.id === selectedDispute.id ? updated : d))
+      );
+      setSelectedDispute(updated);
+      setSuccessMessage(data.message || "Mechanic reassigned successfully");
+      setReassignRemark("");
+    } catch (err) {
+      setError(err.message || "Unable to reassign mechanic");
+    } finally {
+      setReassigning(false);
+    }
+  };
+
+  const approvedMechanics = mechanics.filter((m) => m.status === "approved");
 
   const filteredDisputes = disputes.filter((d) => {
     const searchText = search.toLowerCase();
@@ -185,6 +300,11 @@ const AdminDisputePage = () => {
   const getStatusStepIndex = (status) => {
     const idx = STATUS_FLOW.indexOf(status);
     return idx >= 0 ? idx : 0;
+  };
+
+  const goToServiceTicket = (bookingId) => {
+    if (!bookingId) return;
+    navigate(`/service-tickets?bookingId=${encodeURIComponent(bookingId)}`);
   };
 
   return (
@@ -218,6 +338,12 @@ const AdminDisputePage = () => {
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
               {error}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm border border-green-200">
+              {successMessage}
             </div>
           )}
 
@@ -342,14 +468,31 @@ const AdminDisputePage = () => {
             </div>
 
             <div className="p-5 space-y-4">
+              {error && (
+                <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+                  {error}
+                </div>
+              )}
+
+              {successMessage && (
+                <div className="p-3 rounded-lg bg-green-50 text-green-700 text-sm border border-green-200">
+                  {successMessage}
+                </div>
+              )}
+
               <div className="bg-red-50 p-4 rounded-xl">
                 <p className="text-sm font-medium">Dispute ID</p>
                 <p className="text-sm text-gray-600">
                   {selectedDispute.disputeId}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
+                <button
+                  type="button"
+                  onClick={() => goToServiceTicket(selectedDispute.bookingId)}
+                  className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-medium mt-1 hover:underline"
+                >
                   Booking: {selectedDispute.bookingId}
-                </p>
+                  <ExternalLink size={12} />
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-sm">
@@ -362,6 +505,36 @@ const AdminDisputePage = () => {
                   <p className="font-medium">{selectedDispute.mechanicName}</p>
                 </div>
               </div>
+
+              {selectedDispute.reassignedMechanicName && (
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <UserCog size={16} className="text-blue-600" />
+                    <h3 className="font-medium text-blue-900">Reassigned Mechanic</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-blue-700">New Mechanic</p>
+                      <p className="font-medium text-gray-900">{selectedDispute.reassignedMechanicName}</p>
+                      {selectedDispute.reassignedMechanicCode && (
+                        <p className="text-xs text-gray-500 font-mono mt-0.5">
+                          {selectedDispute.reassignedMechanicCode}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-700">Reassigned On</p>
+                      <p className="text-sm text-gray-900">{formatDate(selectedDispute.reassignedAt)}</p>
+                      {selectedDispute.reassignDate && (
+                        <p className="text-xs text-gray-500 mt-1">Date: {selectedDispute.reassignDate}</p>
+                      )}
+                      {selectedDispute.reassignTime && (
+                        <p className="text-xs text-gray-500">Time: {selectedDispute.reassignTime}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -467,6 +640,72 @@ const AdminDisputePage = () => {
                       </a>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {!selectedDispute.reassignedMechanicName ? (
+                <div className="pt-2 border-t space-y-3">
+                  <div className="flex items-center gap-2">
+                    <UserCog size={16} className="text-blue-600" />
+                    <h3 className="font-medium">Reassign Mechanic</h3>
+                  </div>
+                  <select
+                    value={reassignMechanicId}
+                    onChange={(e) => setReassignMechanicId(e.target.value)}
+                    className="w-full border rounded-lg px-4 py-2"
+                  >
+                    <option value="">Select new mechanic</option>
+                    {approvedMechanics.map((m) => {
+                      const mechanicUserId = m.id || m.userId;
+                      const mechanicCode = m.mechanicId || m.kyc?.mechanicId || "";
+                      return (
+                        <option key={mechanicUserId} value={mechanicUserId}>
+                          {mechanicCode ? `${mechanicCode} — ` : ""}
+                          {m.fullName || m.name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <textarea
+                    value={reassignRemark}
+                    onChange={(e) => setReassignRemark(e.target.value)}
+                    placeholder="Admin remark (e.g. Assigned new mechanic due to customer complaint)"
+                    rows={2}
+                    className="w-full border rounded-lg px-4 py-2 resize-none"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500">Date of reassignment</label>
+                      <input
+                        type="date"
+                        value={reassignDate}
+                        onChange={(e) => setReassignDate(e.target.value)}
+                        className="w-full mt-1 border rounded-lg px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Time of reassignment</label>
+                      <input
+                        type="time"
+                        value={reassignTime}
+                        onChange={(e) => setReassignTime(e.target.value)}
+                        className="w-full mt-1 border rounded-lg px-3 py-2"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={reassignMechanic}
+                    disabled={reassigning || !reassignMechanicId}
+                    className="w-full bg-blue-600 text-white py-3 rounded-xl disabled:opacity-50 hover:bg-blue-700"
+                  >
+                    {reassigning ? "Reassigning..." : "Reassign Mechanic"}
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-2 border-t">
+                  <p className="text-sm text-gray-600 mb-3">
+                    ✓ Mechanic already reassigned.
+                  </p>
                 </div>
               )}
 

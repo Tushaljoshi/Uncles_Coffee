@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import { useToast } from "../hooks/useToast.js";
-import { RefreshCw, Trash2, X, Send, Video } from "lucide-react";
+import { RefreshCw, Trash2, X, Send, Video, Image as ImageIcon } from "lucide-react";
 
 // ── Star Rating ──────────────────────────────────────────
 const StarRating = ({ value, onChange }) => {
@@ -69,8 +69,9 @@ const AddReview = () => {
   const toggleSidebar = () => setSidebarOpen((p) => !p);
 
   const [formData, setFormData] = useState({ name: "", title: "", rating: 5, bio: "" });
-  const [videoFile, setVideoFile] = useState(null);
-  const [videoPreview, setVideoPreview] = useState(null);
+  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
+  const [mediaType, setMediaType] = useState("");
   const [isDragging, setIsDragging] = useState(false);
 
   const [reviews, setReviews] = useState([]);
@@ -108,32 +109,44 @@ const AddReview = () => {
 
   useEffect(() => { fetchReviews(); }, []);
 
-  // ── Video handling ───────────────────────────────────
-  const applyVideo = (file) => {
-    if (!file.type.startsWith("video/")) { showPopup("error", "Only video files allowed"); return; }
-    setVideoFile(file);
-    setVideoPreview(URL.createObjectURL(file));
+  // ── Media handling ───────────────────────────────────
+  const applyMedia = (file) => {
+    const isVideo = file.type.startsWith("video/");
+    const isImage = file.type.startsWith("image/");
+
+    if (!isVideo && !isImage) {
+      showPopup("error", "Only image or video files allowed");
+      return;
+    }
+
+    setMediaFile(file);
+    setMediaPreview(URL.createObjectURL(file));
+    setMediaType(isVideo ? "video" : "image");
   };
 
-  const clearVideo = () => {
-    setVideoFile(null);
-    setVideoPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const clearMedia = () => {
+    setMediaFile(null);
+    setMediaPreview(null);
+    setMediaType("");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f) applyVideo(f);
+    if (f) applyMedia(f);
   };
 
   // ── Upload ───────────────────────────────────────────
   const uploadReview = async (e) => {
     e.preventDefault();
 
-    if (!videoFile) {
-      showPopup("error", "Please select a video");
+    if (!mediaFile) {
+      showPopup("error", "Please select a media file");
       return;
     }
 
@@ -147,7 +160,7 @@ const AddReview = () => {
       data.append("bio", formData.bio);
 
       // ✅🔥 FIXED FIELD NAME
-      data.append("video", videoFile);
+      data.append("video", mediaFile);
 
       const res = await fetch(`${API_BASE}/api/review-Rating/create`, {
         method: "POST",
@@ -162,7 +175,7 @@ const AddReview = () => {
         setReviews((prev) => [result.data, ...prev]);
 
         setFormData({ name: "", title: "", rating: 5, bio: "" });
-        clearVideo();
+        clearMedia();
       } else {
         showPopup("error", result.message || "Upload failed");
       }
@@ -250,7 +263,7 @@ const AddReview = () => {
             </div>
 
             {/* Video Drop Zone */}
-            {!videoPreview ? (
+            {!mediaPreview ? (
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
@@ -263,33 +276,45 @@ const AddReview = () => {
                   ref={fileInputRef}
                   id="videoInput"
                   type="file"
-                  accept="video/*"
-                  onChange={(e) => { if (e.target.files[0]) applyVideo(e.target.files[0]); }}
+                  accept="video/*,image/*"
+                  onChange={(e) => { if (e.target.files[0]) applyMedia(e.target.files[0]); }}
                   className="hidden"
                 />
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-50 flex items-center justify-center">
-                  <Video size={20} className="text-red-500" />
+                  {mediaType === "video" ? (
+                    <Video size={20} className="text-red-500" />
+                  ) : (
+                    <ImageIcon size={20} className="text-red-500" />
+                  )}
                 </div>
                 <p className="text-sm text-gray-600">
-                  Drop video here or <span className="text-red-600 font-medium underline underline-offset-2">browse</span>
+                  Drop media here or <span className="text-red-600 font-medium underline underline-offset-2">browse</span>
                 </p>
-                <p className="text-xs text-gray-400 mt-1">MP4, MOV, WEBM supported</p>
+                <p className="text-xs text-gray-400 mt-1">MP4, MOV, WEBM, JPG, PNG supported</p>
               </div>
             ) : (
               <div className="relative">
-                <video
-                  src={videoPreview}
-                  controls
-                  className="w-full h-44 object-cover rounded-2xl bg-black border border-gray-100"
-                />
+                {mediaType === "video" ? (
+                  <video
+                    src={mediaPreview}
+                    controls
+                    className="w-full h-44 object-cover rounded-2xl bg-black border border-gray-100"
+                  />
+                ) : (
+                  <img
+                    src={mediaPreview}
+                    alt="Preview"
+                    className="w-full h-44 object-cover rounded-2xl border border-gray-100"
+                  />
+                )}
+
                 <button
                   type="button"
-                  onClick={clearVideo}
-                  className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
+                  onClick={clearMedia}
+                  className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center"
                 >
                   <X size={12} />
                 </button>
-                <p className="text-xs text-gray-400 text-center mt-1.5">{videoFile?.name}</p>
               </div>
             )}
 
@@ -341,11 +366,19 @@ const AddReview = () => {
                   className="group relative bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-gray-200 hover:shadow-md transition-all"
                 >
                   <div className="relative bg-black">
-                    <video
-                      src={review.videoUrl}
-                      controls
-                      className="w-full h-36 object-cover"
-                    />
+                    {review.mediaType === "image" ? (
+                      <img
+                        src={review.mediaUrl}
+                        alt={review.name}
+                        className="w-full h-36 object-cover"
+                      />
+                    ) : (
+                      <video
+                        src={review.mediaUrl || review.videoUrl}
+                        controls
+                        className="w-full h-36 object-cover"
+                      />
+                    )}
                     {newIds.has(review.id) && (
                       <span className="absolute top-2 left-2 bg-red-600 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-full z-10">
                         New

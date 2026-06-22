@@ -383,7 +383,7 @@ const AdminMechanicProfile = () => {
                           <div className="p-5 bg-red-50 rounded-2xl border border-red-100 border-l-4 border-l-red-500">
                             <p className="text-[10px] font-bold text-red-400 uppercase mb-2">Status</p>
                             <p className="text-red-700 font-semibold text-sm">Suspended</p>
-                            <p className="text-sm italic text-red-600 mt-2">Reason: {selectedMechanic.adminRemark || selectedMechanic.reason || selectedMechanic.suspensionReason || 'No reason provided'}</p>
+                            <p className="text-sm italic text-red-600 mt-2">Reason: {selectedMechanic.remarks?.suspended || selectedMechanic.suspended || selectedMechanic.adminRemark || selectedMechanic.reason || selectedMechanic.suspensionReason || 'No reason provided'}</p>
                             <p className="text-[10px] text-red-400 mt-4">Suspended On: {selectedMechanic.updatedAt ? new Date(selectedMechanic.updatedAt).toLocaleString() : 'N/A'}</p>
                           </div>
                         ) : selectedMechanic.status === 'rejected' ? (

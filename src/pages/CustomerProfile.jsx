@@ -79,20 +79,33 @@ const AdminCustomerProfile = () => {
     return `CUS${clean.toString().toUpperCase()}`;
   };
 
+  const formatDateTime = (value) => {
+    if (!value) return "Not available";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   /* FILTER LOGIC */
   const filteredCustomers = customers.filter((u) => {
     const keyword = search.toLowerCase();
     const cusId = generateCusId(u).toLowerCase();
 
     const matchesSearch =
-      u.name.toLowerCase().includes(keyword) ||
-      u.email.toLowerCase().includes(keyword) ||
-      u.phone.includes(keyword) ||
+      String(u.name || "").toLowerCase().includes(keyword) ||
+      String(u.email || "").toLowerCase().includes(keyword) ||
+      String(u.phone || "").toLowerCase().includes(keyword) ||
       cusId.includes(keyword);
 
     const matchesGender =
       genderFilter === "all" || 
-      u.gender.toLowerCase() === genderFilter.toLowerCase();
+      String(u.gender || "").toLowerCase() === genderFilter.toLowerCase();
 
     return matchesSearch && matchesGender;
   });
@@ -343,6 +356,10 @@ const AdminCustomerProfile = () => {
                   <h2 className="text-xl font-bold mt-3">
                     {selectedCustomer.name}
                   </h2>
+                  <div className="mt-2 text-sm text-gray-500 space-y-1">
+                    <p>Joined: {formatDateTime(selectedCustomer.createdAt)}</p>
+                    <p>Updated: {formatDateTime(selectedCustomer.updatedAt)}</p>
+                  </div>
                 </div>
 
                 <div className="p-6 space-y-5">

@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from "react";
 import { useToast } from "../hooks/useToast.js";
-import { X, Wrench, Car } from "lucide-react";
+import { X, Wrench, Car, Trash2Icon } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
 // New API Base URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://machcnik.onrender.com/api/master";
 
-const ListItem = ({ label }) => (
+const ListItem = ({ label, onDelete, deleting }) => (
   <div className="flex items-center justify-between px-4 py-3 rounded-lg border bg-gray-50 hover:bg-gray-100 transition">
     <span className="text-sm font-medium text-gray-800">{label}</span>
+    {onDelete && (
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={deleting}
+        className="text-red-600 hover:text-red-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+        title="Delete"
+      >
+        <Trash2Icon size={16} />
+      </button>
+    )}
   </div>
 );
 
@@ -33,6 +44,7 @@ const MechanicServices = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   // Fetch Skills (type=skill)
   const fetchSkills = async () => {
@@ -113,6 +125,38 @@ const MechanicServices = () => {
     }
   };
 
+  const handleDeleteItem = async (item, type) => {
+    const itemId = item.id || item._id;
+    if (!itemId) return;
+
+    if (!window.confirm("Delete this item?")) return;
+
+    setDeletingId(itemId);
+    setError("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/master/${itemId}`, {
+        method: "DELETE",
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        if (type === "skills") {
+          setSkills((prev) => prev.filter((skill) => (skill.id || skill._id) !== itemId));
+        } else {
+          setVehicles((prev) => prev.filter((vehicle) => (vehicle.id || vehicle._id) !== itemId));
+        }
+      } else {
+        setError(data.message || "Failed to delete item");
+      }
+    } catch (err) {
+      console.error("Error deleting item:", err);
+      setError("Network error. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const openModal = (type) => {
     setModalType(type);
     setInputValue("");
@@ -159,7 +203,12 @@ const MechanicServices = () => {
                 <>
                   <div className="space-y-3">
                     {visibleSkills.map((item) => (
-                      <ListItem key={item.id} label={item.name} />
+                      <ListItem
+                        key={item.id || item._id}
+                        label={item.name}
+                        onDelete={() => handleDeleteItem(item, "skills")}
+                        deleting={deletingId === (item.id || item._id)}
+                      />
                     ))}
                     {skills.length === 0 && <p className="text-xs text-gray-400">No skills added yet.</p>}
                   </div>
@@ -190,7 +239,12 @@ const MechanicServices = () => {
                 <>
                   <div className="space-y-3">
                     {visibleVehicles.map((item) => (
-                      <ListItem key={item.id} label={item.name} />
+                      <ListItem
+                        key={item.id || item._id}
+                        label={item.name}
+                        onDelete={() => handleDeleteItem(item, "vehicles")}
+                        deleting={deletingId === (item.id || item._id)}
+                      />
                     ))}
                     {vehicles.length === 0 && <p className="text-xs text-gray-400">No vehicles added yet.</p>}
                   </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Search,
   X,
@@ -248,6 +249,17 @@ const getStatusStyle = (status) => {
   return map[status] || "bg-gray-100 text-gray-600";
 };
 
+const getDisputeStatusStyle = (status) => {
+  const map = {
+    raised: "bg-yellow-100 text-yellow-800",
+    pending: "bg-amber-100 text-amber-800",
+    resolved: "bg-emerald-100 text-emerald-800",
+    rejected: "bg-red-100 text-red-700",
+    closed: "bg-slate-100 text-slate-700",
+  };
+  return map[status] || "bg-gray-100 text-gray-600";
+};
+
 const getBookingTypeStyle = (type) => {
   const map = {
     instant: "bg-blue-50 text-blue-700 border-blue-200",
@@ -298,16 +310,16 @@ const InfoGrid = ({ items }) => {
   if (visible.length === 0) return null;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 sm:gap-x-6 gap-y-3 sm:gap-y-4">
-      {visible.map(({ label, value, fullWidth, mono }) => (
+      {visible.map(({ label, value, fullWidth, mono, render }) => (
         <div key={label} className={fullWidth ? "sm:col-span-2 lg:col-span-3" : ""}>
           <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
-          <p
+          <div
             className={`text-sm sm:text-base text-gray-900 break-words ${mono ? "font-mono text-xs sm:text-sm bg-gray-50 px-2 py-1 rounded" : ""} ${
               value === EMPTY ? "text-gray-400 italic" : "font-medium"
             }`}
           >
-            {value}
-          </p>
+            {render ? render() : value}
+          </div>
         </div>
       ))}
     </div>
@@ -353,6 +365,7 @@ const PersonCard = ({ title, name, phone, image, id, icon: Icon }) => {
           )}
           {hasValue(id) && (
             <p className="text-[8px] sm:text-[10px] text-gray-500 mt-1 font-mono bg-gray-100 px-1.5 py-0.5 rounded inline-block truncate max-w-full">
+              <span className="text-gray-400 font-sans mr-1">{title} ID:</span>
               {id}
             </p>
           )}
@@ -375,7 +388,7 @@ const StarRating = ({ rating }) => (
   </div>
 );
 
-const TicketDetailModal = ({ booking, onClose }) => {
+const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
   if (!booking) return null;
 
   const customer = booking.customer || {};
@@ -434,9 +447,20 @@ const TicketDetailModal = ({ booking, onClose }) => {
               </span>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full flex-shrink-0 border touch-target" aria-label="Close modal">
-            <X size={20} className="text-gray-600" />
-          </button>
+          <div className="flex items-center gap-2">
+            {booking.dispute?.isRaised && (
+              <button
+                type="button"
+                onClick={onViewDispute}
+                className="text-[10px] sm:text-xs font-semibold text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 px-3 py-2 rounded-lg"
+              >
+                View Dispute
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full flex-shrink-0 border touch-target" aria-label="Close modal">
+              <X size={20} className="text-gray-600" />
+            </button>
+          </div>
         </div>
 
         {/* Quick summary */}
@@ -466,7 +490,7 @@ const TicketDetailModal = ({ booking, onClose }) => {
               name={customer.name}
               phone={customer.phone}
               image={customer.profileImage}
-              id={customer.userId}
+              id={customer.customerID}
               icon={User}
             />
             <PersonCard
@@ -474,7 +498,7 @@ const TicketDetailModal = ({ booking, onClose }) => {
               name={mechanic.fullName}
               phone={mechanic.phone}
               image={mechanic.profilePhoto}
-              id={mechanic.mechanicId || booking.mechanicId}
+              id={mechanic.mechanicID}
               icon={Wrench}
             />
           </div>
@@ -732,7 +756,15 @@ const TicketDetailModal = ({ booking, onClose }) => {
                   items={[
                     { label: "Reason", value: displayText(dispute.reason), fullWidth: true },
                     { label: "Description", value: displayText(dispute.description), fullWidth: true },
-                    { label: "Dispute Status", value: formatStatus(dispute.status) },
+                    {
+                      label: "Dispute Status",
+                      fullWidth: true,
+                      render: () => (
+                        <span className={`inline-flex text-xs px-3 py-2 rounded-full font-semibold ${getDisputeStatusStyle(dispute.status)}`}>
+                          {formatStatus(dispute.status)}
+                        </span>
+                      ),
+                    },
                   ]}
                 />
               </div>
@@ -829,10 +861,10 @@ const buildAndExport = (bookingsToExport, { fileName, sheetName }) => {
       "Booking Type": formatBookingType(b.bookingType),
       "Customer Name": displayText(customer.name),
       "Customer Phone": formatPhone(customer.phone),
-      // "Customer ID": displayText(customer.userId),
+      "Customer ID": displayText(customer.customerID),
       "Mechanic Name": displayText(mechanic.fullName),
       "Mechanic Phone": formatPhone(mechanic.phone),
-      // "Mechanic ID": displayText(mechanic.mechanicId || b.mechanicId),
+      "Mechanic ID": displayText(mechanic.mechanicID),
       "Vehicle": `${vehicle.brand || ""} ${vehicle.model || vehicle.vehicleName || ""}`.trim() || EMPTY,
       "Registration Number": displayText(vehicle.registrationNumber),
       "Services": getServiceNames(b),
@@ -874,6 +906,8 @@ const RowSkeleton = () => (
 );
 
 const ServiceTickets = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -910,6 +944,21 @@ const ServiceTickets = () => {
     fetchBookings();
   }, []);
 
+  useEffect(() => {
+    const bookingIdParam = searchParams.get("bookingId");
+    if (!bookingIdParam || bookings.length === 0) return;
+
+    const match = bookings.find((b) => b.bookingId === bookingIdParam);
+    if (match) {
+      setSelectedBooking(match);
+      setSearch(bookingIdParam);
+    } else {
+      setSearch(bookingIdParam);
+    }
+
+    setSearchParams({}, { replace: true });
+  }, [bookings, searchParams, setSearchParams]);
+
   const filteredBookings = useMemo(() => {
     const keyword = search.toLowerCase().trim();
     return bookings.filter((b) => {
@@ -926,9 +975,11 @@ const ServiceTickets = () => {
         customer.name,
         customer.phone,
         customer.userId,
+        customer.customerID,
         mechanic.fullName,
         mechanic.phone,
-        mechanic.mechanicId,
+        mechanic.userId,
+        mechanic.mechanicID,
         vehicle.registrationNumber,
         vehicle.vehicleName,
         vehicle.brand,
@@ -1068,12 +1119,14 @@ const ServiceTickets = () => {
               <table className="w-full text-xs sm:text-sm">
                 <thead className="bg-gray-100 text-gray-600 sticky top-0 z-10">
                   <tr>
+                    <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs">BookingID</th>
                     <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs">Booking</th>
                     <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs">Customer</th>
                     <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs">Mechanic</th>
                     <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs hidden md:table-cell">Vehicle</th>
                     <th className="p-2 sm:p-3 text-left font-semibold text-[10px] sm:text-xs hidden lg:table-cell">Services</th>
                     <th className="p-2 sm:p-3 text-center font-semibold text-[10px] sm:text-xs">Type</th>
+                    <th className="p-2 sm:p-3 text-center font-semibold text-[10px] sm:text-xs">Dispute</th>
                     <th className="p-2 sm:p-3 text-center font-semibold text-[10px] sm:text-xs">Status</th>
                     <th className="p-2 sm:p-3 text-center font-semibold text-[10px] sm:text-xs">Action</th>
                   </tr>
@@ -1097,6 +1150,9 @@ const ServiceTickets = () => {
                           key={b.bookingId}
                           className="border-t border-gray-100 hover:bg-red-50/30 transition-colors"
                         >
+                          <td className="p-2 sm:p-3">
+                            <p className="text-[11px] sm:text-xs font-medium text-gray-700 mt-0.5">{b.bookingId}</p>
+                          </td>
                           <td className="p-2 sm:p-3">
                             <p className="text-[9px] sm:text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                               <Calendar size={10} />
@@ -1133,6 +1189,26 @@ const ServiceTickets = () => {
                             </span>
                           </td>
                           <td className="p-2 sm:p-3 text-center">
+                            {b.dispute?.isRaised ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-[9px] sm:text-[10px] font-semibold text-red-700">Raised</span>
+                                <button
+                                  onClick={() => navigate(`/dispute?bookingId=${encodeURIComponent(b.bookingId)}`)}
+                                  className="text-[10px] sm:text-[11px] text-white bg-red-600 hover:bg-red-700 px-2 py-1 rounded-lg"
+                                >
+                                  View
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                disabled
+                                className="text-[10px] sm:text-[11px] bg-gray-200 text-gray-500 px-2 py-1 rounded-lg cursor-not-allowed"
+                              >
+                                No Dispute
+                              </button>
+                            )}
+                          </td>
+                          <td className="p-2 sm:p-3 text-center">
                             <span
                               className={`text-[8px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${getStatusStyle(b.status)}`}
                             >
@@ -1159,7 +1235,11 @@ const ServiceTickets = () => {
       </div>
 
       {selectedBooking && (
-        <TicketDetailModal booking={selectedBooking} onClose={() => setSelectedBooking(null)} />
+        <TicketDetailModal
+          booking={selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+          onViewDispute={() => navigate(`/dispute?bookingId=${encodeURIComponent(selectedBooking.bookingId)}`)}
+        />
       )}
 
       {showExportModal && (
