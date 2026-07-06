@@ -18,6 +18,18 @@ const VEHICLE_ORDER_GROUPS = [
   ["truck"],
 ];
 
+const SERVICE_ORDER_GROUPS = [
+  ["General service", "General Services", "General Servicing"],
+  ["Engine oil"],
+  ["Tyre & Wheel care"],
+  ["Batteries"],
+  ["Brake & Suspension"],
+  ["Lights & Mirror"],
+  ["Switches & Buttons"],
+  ["Denting & Painting"],
+  ["Clutch & Transmission"],
+];
+
 const getOrderIndex = (name = "") => {
   const n = name.toLowerCase();
   for (let i = 0; i < VEHICLE_ORDER_GROUPS.length; i++) {
@@ -30,6 +42,25 @@ const getOrderIndex = (name = "") => {
 
 const sortVehicles = (vehicles) =>
   [...vehicles].sort((a, b) => getOrderIndex(a.name) - getOrderIndex(b.name));
+
+const getServiceOrderIndex = (name = "") => {
+  const n = name.toLowerCase();
+  for (let i = 0; i < SERVICE_ORDER_GROUPS.length; i++) {
+    for (const kw of SERVICE_ORDER_GROUPS[i]) {
+      if (n.includes(kw.toLowerCase())) return i;
+    }
+  }
+  return SERVICE_ORDER_GROUPS.length;
+};
+
+const sortServices = (services) =>
+  [...services].sort((a, b) => getServiceOrderIndex(a.name) - getServiceOrderIndex(b.name));
+
+const sortBrands = (brands) =>
+  [...brands].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+const sortServiceTypes = (types) =>
+  [...types].sort((a, b) => (a.price || 0) - (b.price || 0));
 
 const CategoryCardSkeleton = () => (
   <div className="bg-white rounded-xl border shadow-sm overflow-hidden animate-pulse">
@@ -113,6 +144,7 @@ const CreateService = () => {
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
   const [itemDiscountPrice, setItemDiscountPrice] = useState("");
+  const [estimatedTime, setEstimatedTime] = useState("");
   const [itemDesc, setItemDesc] = useState("");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(null);
@@ -127,6 +159,15 @@ const CreateService = () => {
   const [brandLoading, setBrandLoading] = useState(false);
   const [selectedBrandId, setSelectedBrandId] = useState(null);
   const [modelsList, setModelsList] = useState([]);
+  const [vehicleBrands, setVehicleBrands] = useState({});
+  const [selectedBrandByService, setSelectedBrandByService] = useState({});
+  const [selectedModelByService, setSelectedModelByService] = useState({});
+  const [filteredTypesByService, setFilteredTypesByService] = useState({});
+  const [loadingFilteredTypesByService, setLoadingFilteredTypesByService] = useState({});
+  // For service-type creation: multiple brand/model selection
+  const [selectedBrandIds, setSelectedBrandIds] = useState([]);
+  const [modelsByBrand, setModelsByBrand] = useState({});
+  const [selectedModelIdsByBrand, setSelectedModelIdsByBrand] = useState({});
   const [modelName, setModelName] = useState("");
   const [editingModelId, setEditingModelId] = useState(null);
   const [modelLoading, setModelLoading] = useState(false);
@@ -168,17 +209,58 @@ const CreateService = () => {
       if (sRes.status === 429) throw new Error("Rate limit exceeded. Please wait.");
       const services = await sRes.json();
 
+      // For each service, fetch types per brand+model using admin endpoints
+      // Step 1: get brands for this vehicle (normalize response shape)
+      let brands = [];
+      try {
+        const bRes = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand`);
+        if (bRes.ok) {
+          const jb = await bRes.json();
+          brands = Array.isArray(jb) ? jb : jb?.data || [];
+        }
+      } catch (err) {
+        brands = [];
+      }
+      // persist brands for this vehicle so UI filters can use them
+      setVehicleBrands((prev) => ({ ...prev, [vehicleId]: sortBrands(brands) }));
+
       const servicesWithTypes = await Promise.all(
         (Array.isArray(services) ? services : []).map(async (s) => {
-          try {
-            const tRes = await fetch(
-              `${API_BASE_URL}/api/client/vehicle/${vehicleId}/service/${s.id}/types`
-            );
-            const types = await tRes.json();
-            return { ...s, types: Array.isArray(types) ? types : [] };
-          } catch {
-            return { ...s, types: [] };
+          const aggregatedTypes = [];
+          const typeMap = new Map(); // Map to deduplicate by type ID
+          
+          for (const brand of Array.isArray(brands) ? brands : []) {
+            let models = [];
+            try {
+              const mRes = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand/${brand.id}/model`);
+              if (mRes.ok) {
+                const jm = await mRes.json();
+                models = Array.isArray(jm) ? jm : jm?.data || [];
+              }
+            } catch (err) {
+              models = [];
+            }
+
+            for (const model of models) {
+              try {
+                const tRes = await fetch(
+                  `${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand/${brand.id}/model/${model.id}/service/${s.id}/types`
+                );
+                if (!tRes.ok) continue;
+                const j = await tRes.json();
+                const list = (j && (Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : []));
+                for (const t of list) {
+                  if (!typeMap.has(t.id)) {
+                    typeMap.set(t.id, { ...t, _brandId: brand.id, _modelId: model.id, _brandName: brand.name, _modelName: model.name });
+                  }
+                }
+              } catch (err) {
+                // ignore per-model errors
+              }
+            }
           }
+          aggregatedTypes.push(...typeMap.values());
+          return { ...s, types: sortServiceTypes(aggregatedTypes) };
         })
       );
 
@@ -187,7 +269,7 @@ const CreateService = () => {
         ...prev,
         vehicle: prev.vehicle.map((v) =>
           v.id === vehicleId
-            ? { ...v, items: servicesWithTypes, detailsLoaded: true }
+            ? { ...v, items: sortServices(servicesWithTypes), detailsLoaded: true }
             : v
         ),
       }));
@@ -239,12 +321,12 @@ const CreateService = () => {
         equipment: [{
           id: "all-equip",
           name: "General Equipment",
-          items: equipments.map((e) => ({
+          items: sortServices(equipments.map((e) => ({
             id: e.id,
             name: e.name,
             icon: e.iconUrl,
             types: [],
-          })),
+          }))),
         }],
       }));
     } catch (err) {
@@ -278,6 +360,16 @@ const CreateService = () => {
     }
   }, [activeTab, expandedId, fetchVehicleDetails]);
 
+  // When opening the create type modal and a vehicle is selected, load brands for that vehicle
+  useEffect(() => {
+    if (modalMode === "type" && selectedCategoryId) {
+      fetchBrands(selectedCategoryId);
+      setSelectedBrandIds([]);
+      setModelsByBrand({});
+      setSelectedModelIdsByBrand({});
+    }
+  }, [modalMode, selectedCategoryId]);
+
   // Brands API helpers
   const fetchBrands = async (vehicleId) => {
     if (!vehicleId) return;
@@ -286,7 +378,7 @@ const CreateService = () => {
       const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand`);
       if (!res.ok) throw new Error("Failed to fetch brands");
       const data = await res.json();
-      setBrandsList(Array.isArray(data) ? data : []);
+      setBrandsList(sortBrands(Array.isArray(data) ? data : []));
     } catch (err) {
       addToast(err.message || "Failed to load brands", "error");
       setBrandsList([]);
@@ -396,6 +488,87 @@ const CreateService = () => {
     setFuelName("");
     setEditingFuelId(null);
     fetchModels(brandsVehicleId, brandId);
+  };
+
+  // Fetch models for a given vehicleId+brandId (used in type creation modal)
+  const fetchModelsForType = async (vehicleId, brandId) => {
+    if (!vehicleId || !brandId) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand/${brandId}/model`);
+      if (!res.ok) throw new Error("Failed to fetch models");
+      const data = await res.json();
+      const models = Array.isArray(data) ? data : data.data || [];
+      setModelsByBrand((prev) => ({ ...prev, [brandId]: models }));
+      setSelectedModelIdsByBrand((prev) => ({ ...prev, [brandId]: prev[brandId] ? new Set(prev[brandId]) : new Set() }));
+    } catch (err) {
+      addToast(err.message || "Failed to load models", "error");
+      setModelsByBrand((prev) => ({ ...prev, [brandId]: [] }));
+    }
+  };
+
+  const toggleBrandSelection = (brandId) => {
+    setSelectedBrandIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(brandId)) {
+        next.delete(brandId);
+        // also clear models selection for this brand
+        setSelectedModelIdsByBrand((s) => {
+          const copy = { ...s };
+          delete copy[brandId];
+          return copy;
+        });
+      } else {
+        next.add(brandId);
+        fetchModelsForType(selectedCategoryId, brandId);
+      }
+      return Array.from(next);
+    });
+  };
+
+  const toggleModelSelection = (brandId, modelId) => {
+    setSelectedModelIdsByBrand((prev) => {
+      const copy = { ...prev };
+      const setForBrand = copy[brandId] ? new Set(copy[brandId]) : new Set();
+      if (setForBrand.has(modelId)) setForBrand.delete(modelId);
+      else setForBrand.add(modelId);
+      copy[brandId] = setForBrand;
+      return copy;
+    });
+  };
+
+  const handleFilterBrandChange = (serviceId, vehicleId, brandId) => {
+    setSelectedBrandByService((prev) => ({ ...prev, [serviceId]: brandId }));
+    setSelectedModelByService((prev) => ({ ...prev, [serviceId]: null }));
+    // fetch models for this brand
+    if (brandId) fetchModelsForType(vehicleId, brandId);
+    // clear any previous filtered types for this service
+    setFilteredTypesByService((prev) => ({ ...prev, [serviceId]: null }));
+  };
+
+  const handleFilterModelChange = async (serviceId, vehicleId, brandId, modelId) => {
+    setSelectedModelByService((prev) => ({ ...prev, [serviceId]: modelId }));
+    if (!brandId || !modelId) {
+      setFilteredTypesByService((prev) => ({ ...prev, [serviceId]: null }));
+      return;
+    }
+    setLoadingFilteredTypesByService((prev) => ({ ...prev, [serviceId]: true }));
+    const types = await fetchServiceTypesForMapping(vehicleId, brandId, modelId, serviceId);
+    setFilteredTypesByService((prev) => ({ ...prev, [serviceId]: sortServiceTypes(types) }));
+    setLoadingFilteredTypesByService((prev) => ({ ...prev, [serviceId]: false }));
+  };
+
+  // Helper: fetch service types for a specific vehicle-brand-model-service tuple (admin API)
+  const fetchServiceTypesForMapping = async (vehicleId, brandId, modelId, serviceId) => {
+    if (!vehicleId || !brandId || !modelId || !serviceId) return [];
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/brand/${brandId}/model/${modelId}/service/${serviceId}/types`);
+      if (!res.ok) throw new Error("Failed to fetch service types");
+      const data = await res.json();
+      return Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+    } catch (err) {
+      addToast(err.message || "Failed to load service types", "error");
+      return [];
+    }
   };
 
   const fetchFuels = async (vehicleId, brandId, modelId) => {
@@ -741,21 +914,35 @@ const CreateService = () => {
         await refreshCurrentTab(editingServiceCategoryId);
       } else if (modalMode === "editType") {
         const updateTypeFormData = new FormData();
+        updateTypeFormData.append("serviceId", selectedServiceId || editingTypeServiceId);
         updateTypeFormData.append("name", itemName.trim());
         updateTypeFormData.append("price", itemPrice);
         updateTypeFormData.append("discountPrice", itemDiscountPrice || 0);
+        updateTypeFormData.append("estimatedTime", estimatedTime);
         updateTypeFormData.append("description", itemDesc);
-        if (iconFile) updateTypeFormData.append("image", iconFile);
-      
-        const response = await fetch(
-          `${API_BASE_URL}/api/admin/vehicle/${editingTypeCategoryId}/service/${editingTypeServiceId}/type/${editingTypeId}`,
-          {
-            method: "PUT",
-            body: updateTypeFormData,
+        const mappings = [];
+        for (const brandId of selectedBrandIds || []) {
+          const setForBrand = selectedModelIdsByBrand[brandId];
+          if (setForBrand && setForBrand.size) {
+            for (const m of setForBrand) {
+              mappings.push({ vehicleId: selectedCategoryId || editingTypeCategoryId, brandId, modelId: m });
+            }
           }
-        );
+        }
+        if (mappings.length > 0) {
+          updateTypeFormData.append("vehicleMappings", JSON.stringify(mappings));
+        }
+        if (iconFile) updateTypeFormData.append("image", iconFile);
 
-        if (!response.ok) throw new Error("Failed to update service type");
+        const response = await fetch(`${API_BASE_URL}/api/admin/service-types/${editingTypeId}`, {
+          method: "PUT",
+          body: updateTypeFormData,
+        });
+
+        if (!response.ok) {
+          const text = await response.text().catch(() => null);
+          throw new Error(text || "Failed to update service type");
+        }
 
         setShowModal(false);
         resetModal();
@@ -779,22 +966,48 @@ const CreateService = () => {
         resetModal();
         await refreshCurrentTab();
       } else if (modalMode === "type") {
+        if (!selectedCategoryId) return addToast("Please select a vehicle", "warning");
+        if (!selectedServiceId) return addToast("Please select a service", "warning");
+        if (!itemName?.trim()) return addToast("Name is required", "warning");
+        if (!itemPrice) return addToast("Price is required", "warning");
+
+        // build vehicleMappings from selected brands/models
+        const mappings = [];
+        for (const brandId of selectedBrandIds || []) {
+          const setForBrand = selectedModelIdsByBrand[brandId];
+          if (setForBrand && setForBrand.size) {
+            for (const m of setForBrand) {
+              mappings.push({ vehicleId: selectedCategoryId, brandId, modelId: m });
+            }
+          }
+        }
+
+        if (mappings.length === 0) return addToast("Select at least one model for selected brands", "warning");
+
         const formData = new FormData();
+        formData.append("serviceId", selectedServiceId);
         formData.append("name", itemName.trim());
         formData.append("price", itemPrice);
         formData.append("discountPrice", itemDiscountPrice || 0);
-        formData.append("description", itemDesc);
-        formData.append("image", iconFile);
+        formData.append("description", itemDesc || "");
+        formData.append("estimatedTime", estimatedTime || "");
+        formData.append("vehicleMappings", JSON.stringify(mappings));
+        if (iconFile) formData.append("image", iconFile);
 
-        const response = await fetch(`${API_BASE_URL}/api/admin/vehicle/${selectedCategoryId}/service/${selectedServiceId}/type`, {
+        const response = await fetch(`${API_BASE_URL}/api/admin/service-types`, {
           method: "POST",
           body: formData,
         });
 
         if (response.ok) {
+          const data = await response.json().catch(() => ({}));
+          addToast(data.message || "Service type created", "success");
           setShowModal(false);
           resetModal();
           await refreshCurrentTab(selectedCategoryId);
+        } else {
+          const text = await response.text().catch(() => null);
+          throw new Error(text || "Failed to create service type");
         }
       } else {
         const formData = new FormData();
@@ -833,10 +1046,13 @@ const CreateService = () => {
     setItemPrice("");
     setItemDiscountPrice("");
     setItemDesc("");
+    setEstimatedTime("");
     setSelectedCategoryId("");
     setSelectedServiceId("");
     setIconFile(null);
     setIconPreview(null);
+    setSelectedBrandIds([]);
+    setSelectedModelIdsByBrand({});
     setModalMode("service");
   };
 
@@ -859,17 +1075,37 @@ const CreateService = () => {
     setShowModal(true);
   };
 
-  const openEditTypeModal = (type, serviceId, categoryId) => {
+  const openEditTypeModal = async (type, serviceId, categoryId) => {
     resetModal();
     setModalMode("editType");
     setEditingTypeId(type.id);
     setEditingTypeServiceId(serviceId);
     setEditingTypeCategoryId(categoryId);
+    setSelectedCategoryId(categoryId);
+    setSelectedServiceId(serviceId);
     setItemName(type.name || "");
     setItemPrice(type.price || "");
     setItemDiscountPrice(type.discountPrice ?? type.discount_price ?? 0);
     setItemDesc(type.description || "");
-    setIconPreview(type.image || type.image_url || null); 
+    setEstimatedTime(type.estimatedTime || "");
+    setIconPreview(type.image || type.image_url || type.imageUrl || null);
+
+    const mappings = Array.isArray(type.vehicleMappings) ? type.vehicleMappings : [];
+    const brandIds = [...new Set(mappings.map((m) => m.brandId).filter(Boolean))];
+    setSelectedBrandIds(brandIds);
+    const modelSelection = {};
+    mappings.forEach((m) => {
+      if (!m.brandId || !m.modelId) return;
+      modelSelection[m.brandId] = modelSelection[m.brandId] || new Set();
+      modelSelection[m.brandId].add(m.modelId);
+    });
+    setSelectedModelIdsByBrand(modelSelection);
+
+    if (categoryId && brandIds.length > 0) {
+      await fetchBrands(categoryId);
+      await Promise.all(brandIds.map((brandId) => fetchModelsForType(categoryId, brandId)));
+    }
+
     setShowModal(true);
   };
 
@@ -928,7 +1164,7 @@ const CreateService = () => {
     if (!window.confirm("Delete this service type?")) return;
     try {
       setSubmitting(true);
-      const res = await fetch(`${API_BASE_URL}/api/admin/vehicle/${vehicleId}/service/${serviceId}/type/${typeId}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE_URL}/api/admin/service-types/${typeId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete service type");
       const data = await res.json().catch(() => ({}));
       addToast(data.message || "Service type deleted", "success");
@@ -1124,45 +1360,78 @@ const CreateService = () => {
                               </div>
                             </div>
 
-                            {/* Service Types inside the Service */}
-                            {item.types && item.types.length > 0 && (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {item.types.map(type => (
-                                  <div key={type.id} className="bg-gray-50 p-3 rounded border flex items-center justify-between gap-3 group">
-                                    <div className="flex items-center gap-3 flex-1">
-                                      <img src={type.imageUrl} className="w-10 h-10 rounded object-cover" alt="" />
-                                      <div className="text-sm">
-                                        <p className="font-bold text-gray-800">{type.name}</p>
-                                        <p className="font-bold text-gray-800">{type.description}</p>
-                                        <p className="text-red-600 font-semibold"> Original Price: ₹{type.price}</p>
-                                        {((type.discountPrice ?? type.discount_price) || 0) > 0 && (
-                                          <p className="text-sm font-medium text-green-600">Discount Price: ₹{type.discountPrice ?? type.discount_price}</p>
-                                        )}
+                            {/* Service Types inside the Service with brand/model filters */}
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <label className="text-sm font-medium">Filter:</label>
+                                <select className="border p-2 rounded-lg" value={selectedBrandByService[item.id] || ''} onChange={(e) => handleFilterBrandChange(item.id, category.id, e.target.value)}>
+                                  <option value="">Show All Brands</option>
+                                  {(vehicleBrands[category.id] || []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </select>
+
+                                <select className="border p-2 rounded-lg" value={selectedModelByService[item.id] || ''} onChange={(e) => handleFilterModelChange(item.id, category.id, selectedBrandByService[item.id], e.target.value)} disabled={!selectedBrandByService[item.id]}>
+                                  <option value="">Show All Models</option>
+                                  {(modelsByBrand[selectedBrandByService[item.id]] || []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                </select>
+                              </div>
+
+                              {/* Types list: either filtered or aggregated */}
+                              {loadingFilteredTypesByService[item.id] ? (
+                                <div className="text-sm text-gray-500">Loading types...</div>
+                              ) : (filteredTypesByService[item.id] && Array.isArray(filteredTypesByService[item.id]) ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {filteredTypesByService[item.id].map(type => (
+                                    <div key={type.id} className="bg-gray-50 p-3 rounded border flex items-center justify-between gap-3 group">
+                                      <div className="flex items-center gap-3 flex-1">
+                                        <img src={type.imageUrl || type.image || type.image_url} className="w-10 h-10 rounded object-cover" alt="" />
+                                        <div className="text-sm">
+                                          <p className="font-bold text-gray-800">{type.name}</p>
+                                          <p className="font-bold text-gray-800">{type.description}</p>
+                                          <p className="text-sm text-gray-500">{type.estimatedTime ? `Estimated Time: ${type.estimatedTime}` : ''}</p>
+                                          {/* {(type._brandName || type._modelName) && (
+                                            <p className="text-xs text-gray-500">{type._brandName ? `Brand: ${type._brandName}` : ''}{type._brandName && type._modelName ? ' | ' : ''}{type._modelName ? `Model: ${type._modelName}` : ''}</p>
+                                          )} */}
+                                          <p className="text-red-600 font-semibold"> Original Price: ₹{type.price}</p>
+                                          {((type.discountPrice ?? type.discount_price) || 0) > 0 && (
+                                            <p className="text-sm font-medium text-green-600">Discount Price: ₹{type.discountPrice ?? type.discount_price}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button type="button" onClick={() => openEditTypeModal(type, item.id, category.id)} className="p-1 rounded hover:bg-gray-200" title="Edit Service Type"><Edit2 size={16} className="text-gray-600" /></button>
+                                        <button type="button" onClick={() => { if (!window.confirm("Delete this service type?")) return; handleDeleteType(category.id, item.id, type.id); }} className="p-1 rounded hover:bg-gray-200" title="Delete Service Type"><Trash2 size={16} className="text-gray-600" /></button>
                                       </div>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditTypeModal(type, item.id, category.id)}
-                                      className="p-1 rounded hover:bg-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      title="Edit Service Type"
-                                    >
-                                      <Edit2 size={16} className="text-gray-600" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (!window.confirm("Delete this service type?")) return;
-                                        handleDeleteType(category.id, item.id, type.id);
-                                      }}
-                                      className="p-1 rounded hover:bg-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      title="Delete Service Type"
-                                    >
-                                      <Trash2 size={16} className="text-gray-600" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {item.types.map(type => (
+                                    <div key={type.id} className="bg-gray-50 p-3 rounded border flex items-center justify-between gap-3 group">
+                                      <div className="flex items-center gap-3 flex-1">
+                                        <img src={type.imageUrl} className="w-10 h-10 rounded object-cover" alt="" />
+                                        <div className="text-sm">
+                                          <p className="font-bold text-gray-800">{type.name}</p>
+                                          <p className="font-bold text-gray-800">{type.description}</p>
+                                          <p className="text-sm text-gray-500">{type.estimatedTime ? `Estimated Time: ${type.estimatedTime}` : ''}</p>
+                                          {/* {(type._brandName || type._modelName) && (
+                                            <p className="text-xs text-gray-500">{type._brandName ? `Brand: ${type._brandName}` : ''}{type._brandName && type._modelName ? ' | ' : ''}{type._modelName ? `Model: ${type._modelName}` : ''}</p>
+                                          )} */}
+                                          <p className="text-red-600 font-semibold"> Original Price: ₹{type.price}</p>
+                                          {((type.discountPrice ?? type.discount_price) || 0) > 0 && (
+                                            <p className="text-sm font-medium text-green-600">Discount Price: ₹{type.discountPrice ?? type.discount_price}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button type="button" onClick={() => openEditTypeModal(type, item.id, category.id)} className="p-1 rounded hover:bg-gray-200" title="Edit Service Type"><Edit2 size={16} className="text-gray-600" /></button>
+                                        <button type="button" onClick={() => { if (!window.confirm("Delete this service type?")) return; handleDeleteType(category.id, item.id, type.id); }} className="p-1 rounded hover:bg-gray-200" title="Delete Service Type"><Trash2 size={16} className="text-gray-600" /></button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1180,7 +1449,7 @@ const CreateService = () => {
       {/* Modal code remains the same... */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white p-6 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex justify-between mb-4 border-b pb-2">
               <h3 className="text-xl font-bold">
                 {modalMode === "type"
@@ -1244,6 +1513,16 @@ const CreateService = () => {
                     />
                   </div>
                   <div>
+                    <label className="block text-sm font-medium mb-1">Estimated Time</label>
+                    <input
+                      type="text"
+                      placeholder="Estimated Time (e.g. 30 mins)"
+                      className="w-full border p-2 rounded-lg"
+                      value={estimatedTime}
+                      onChange={(e) => setEstimatedTime(e.target.value)}
+                    />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium mb-1">Upload Image</label>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
@@ -1282,31 +1561,118 @@ const CreateService = () => {
                 <>
                   <div>
                     <label className="block text-sm font-medium mb-1">Select Vehicle</label>
-                    <select className="w-full border p-2 rounded-lg" onChange={(e) => handleVehicleSelect(e.target.value)}>
+                    <select className="w-full border p-2 rounded-lg" onChange={(e) => handleVehicleSelect(e.target.value)} value={selectedCategoryId || ''}>
                       <option value="">Choose Vehicle</option>
                       {categories.vehicle.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </select>
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium mb-1">Select Service</label>
-                    <select className="w-full border p-2 rounded-lg" onChange={(e) => setSelectedServiceId(e.target.value)} disabled={!selectedCategoryId || loadingVehicleIds.has(selectedCategoryId)}>
+                    <select className="w-full border p-2 rounded-lg" onChange={(e) => setSelectedServiceId(e.target.value)} value={selectedServiceId || ''} disabled={!selectedCategoryId || loadingVehicleIds.has(selectedCategoryId)}>
                       <option value="">{loadingVehicleIds.has(selectedCategoryId) ? "Loading services..." : "Choose Service"}</option>
                       {categories.vehicle.find(v => v.id === selectedCategoryId)?.items.map(s => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Price</label>
-                    <input type="number" placeholder="Price (e.g. 500)" className="w-full border p-2 rounded-lg" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Price</label>
+                      <input type="number" placeholder="Price (e.g. 500)" className="w-full border p-2 rounded-lg" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Discount Price</label>
+                      <input type="number" placeholder="Discount Price (default 0)" className="w-full border p-2 rounded-lg" value={itemDiscountPrice} onChange={(e) => setItemDiscountPrice(e.target.value)} />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Discount Price</label>
-                    <input type="number" placeholder="Discount Price (default 0)" className="w-full border p-2 rounded-lg" value={itemDiscountPrice} onChange={(e) => setItemDiscountPrice(e.target.value)} />
-                  </div>
+
                   <div>
                     <label className="block text-sm font-medium mb-1">Description</label>
                     <textarea placeholder="Description" className="w-full border p-2 rounded-lg" value={itemDesc} onChange={(e) => setItemDesc(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Estimated Time</label>
+                    <input
+                      type="text"
+                      placeholder="Estimated Time (e.g. 30 mins)"
+                      className="w-full border p-2 rounded-lg"
+                      value={estimatedTime}
+                      onChange={(e) => setEstimatedTime(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Select Brand(s)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {brandLoading && brandsList.length === 0 ? (
+                        <div className="text-sm text-gray-400">Loading brands...</div>
+                      ) : brandsList.length === 0 ? (
+                        <div className="text-sm text-gray-400">No brands found for this vehicle.</div>
+                      ) : (
+                        brandsList.map(b => {
+                          const selected = selectedBrandIds.includes(b.id);
+                          return (
+                            <button key={b.id} type="button" onClick={() => toggleBrandSelection(b.id)} className={`px-3 py-1 rounded-full border ${selected ? 'bg-red-600 text-white' : 'bg-white text-gray-700'}`}>
+                              {b.name}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Models grid for selected brands */}
+                  {selectedBrandIds.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Select Models</label>
+                      <div className="space-y-3 max-h-48 overflow-y-auto border rounded p-2">
+                        {selectedBrandIds.map((brandId) => (
+                          <div key={brandId} className="mb-2">
+                            <div className="flex items-center justify-between mb-2">
+                              <strong>{brandsList.find(b => b.id === brandId)?.name || 'Brand'}</strong>
+                              <div className="text-sm text-gray-500">
+                                <button type="button" onClick={() => {
+                                  // select all models for brand
+                                  const models = modelsByBrand[brandId] || [];
+                                  setSelectedModelIdsByBrand((prev) => ({ ...prev, [brandId]: new Set(models.map(m => m.id)) }));
+                                }} className="mr-2 underline">Select all</button>
+                                <button type="button" onClick={() => setSelectedModelIdsByBrand((prev) => { const copy = { ...prev }; copy[brandId] = new Set(); return copy; })} className="underline">Clear</button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {(modelsByBrand[brandId] || []).map(m => {
+                                const setForBrand = selectedModelIdsByBrand[brandId] ? new Set(selectedModelIdsByBrand[brandId]) : new Set();
+                                const checked = setForBrand.has(m.id);
+                                return (
+                                  <label key={m.id} className="flex items-center gap-2 px-2 py-1 border rounded-lg">
+                                    <input type="checkbox" checked={checked} onChange={() => toggleModelSelection(brandId, m.id)} />
+                                    <span className="text-sm">{m.name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Upload Image</label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
+                        <span className="text-sm text-gray-600 font-medium">Upload Image</span>
+                        <input type="file" onChange={handleIconUpload} className="hidden" />
+                      </label>
+                      {iconPreview && (
+                        <div className="relative">
+                          <img src={iconPreview} alt="preview" className="w-14 h-14 rounded-xl border shadow-sm object-cover" />
+                          <button type="button" onClick={() => { setIconFile(null); setIconPreview(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow hover:bg-red-600">✕</button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               ) : modalMode === "vehicle" ? (
