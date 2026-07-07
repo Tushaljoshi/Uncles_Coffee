@@ -51,6 +51,9 @@ const getStatusDotColor = (status) => {
   return map[status] || "bg-gray-400";
 };
 
+const isChatAvailable = (status) =>
+  ["under_review", "resolution_in_progress", "resolved"].includes(status);
+
 const formatDate = (date) => {
   if (!date) return "—";
   return new Date(date).toLocaleString("en-IN", {
@@ -77,6 +80,7 @@ const normalizeDispute = (item) => {
     mechanicId: item.mechanic?.userId || item.mechanic?.id || "",
     mechanicCode: item.mechanic?.mechanicID || item.mechanic?.mechanicId || "",
     reassignedMechanicName: reassignedMech.name || reassignedMech.fullName || "",
+    reassignedMechanicPhone: reassignedMech.phone || reassignedMech.mobile || "",
     reassignedMechanicImage: reassignedMech.image || reassignedMech.profilePhoto || "",
     reassignedMechanicId: reassignedMech.userId || reassignedMech.id || "",
     reassignedMechanicCode: reassignedMech.mechanicId || "",
@@ -119,6 +123,13 @@ const AdminDisputePage = () => {
   const [reassignTime, setReassignTime] = useState("");
   const [reassigning, setReassigning] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [chatModalOpen, setChatModalOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatPosting, setChatPosting] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const [chatSuccess, setChatSuccess] = useState("");
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -172,16 +183,77 @@ const AdminDisputePage = () => {
     }
   };
 
+  const fetchDisputeChat = async (bookingId) => {
+    if (!bookingId) return;
+    setChatLoading(true);
+    setChatError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/servicebookings/${bookingId}/chat`);
+      if (!res.ok) throw new Error(`API Error: ${res.status}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setChatMessages(data.data);
+      } else {
+        throw new Error(data.message || "Failed to load chat history");
+      }
+    } catch (err) {
+      setChatError(err.message || "Unable to fetch chat history");
+      setChatMessages([]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const sendChatMessage = async () => {
+    if (!selectedDispute) return;
+    const message = chatInput.trim();
+    if (!message) {
+      setChatError("Please enter a message");
+      return;
+    }
+
+    setChatPosting(true);
+    setChatError("");
+    setChatSuccess("");
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/servicebookings/admin/${selectedDispute.bookingId}/chat`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        }
+      );
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || "Failed to send message");
+      }
+      setChatSuccess(data.message || "Reply sent");
+      setChatInput("");
+      await fetchDisputeChat(selectedDispute.bookingId);
+    } catch (err) {
+      setChatError(err.message || "Unable to send message");
+    } finally {
+      setChatPosting(false);
+    }
+  };
+
   useEffect(() => {
     if (selectedDispute) {
       setEditStatus(selectedDispute.status);
       setEditRemark(selectedDispute.adminRemark || "");
       setRemarksOpen(false);
-      setReassignMechanicId("");
+      setReassignMechanicId(
+        selectedDispute.reassignedMechanicId || selectedDispute.mechanicId || ""
+      );
       setReassignRemark("");
       setReassignDate(selectedDispute.reassignDate || "");
       setReassignTime(selectedDispute.reassignTime || "");
       setSuccessMessage("");
+      setChatMessages([]);
+      setChatInput("");
+      setChatError("");
+      setChatSuccess("");
     }
   }, [selectedDispute]);
 
@@ -235,19 +307,22 @@ const AdminDisputePage = () => {
     setError("");
     setSuccessMessage("");
     try {
-      const res = await fetch(
-        `${API_BASE}/api/servicebookings/admin/reassign/${selectedDispute.bookingId}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mechanicId: reassignMechanicId,
-            adminRemark: reassignRemark,
-            DateOfReassignment: reassignDate,
-            TimeOfReassignment: reassignTime,
-          }),
-        }
-      );
+      // Use different endpoint based on whether mechanic is already reassigned
+      const isUpdate = !!selectedDispute.reassignedMechanicId;
+      const endpoint = isUpdate
+        ? `${API_BASE}/api/servicebookings/admin/dispute/${selectedDispute.bookingId}/reassign`
+        : `${API_BASE}/api/servicebookings/admin/reassign/${selectedDispute.bookingId}`;
+
+      const res = await fetch(endpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mechanicId: reassignMechanicId,
+          DateOfReassignment: reassignDate,
+          TimeOfReassignment: reassignTime,
+          adminRemark: reassignRemark,
+        }),
+      });
       const data = await res.json();
       if (!data.success) {
         throw new Error(data.message || "Failed to reassign mechanic");
@@ -258,12 +333,14 @@ const AdminDisputePage = () => {
       );
       const updated = {
         ...selectedDispute,
-        mechanicName: selectedMech?.fullName || selectedMech?.name || selectedDispute.mechanicName,
-        mechanicId: reassignMechanicId,
-        mechanicCode:
-          selectedMech?.mechanicId ||
-          selectedMech?.kyc?.mechanicId ||
-          selectedDispute.mechanicCode,
+        reassignedMechanicName:
+          selectedMech?.fullName || selectedMech?.name || selectedDispute.reassignedMechanicName || "",
+        reassignedMechanicPhone:
+          selectedMech?.phone || selectedMech?.mobile || selectedDispute.reassignedMechanicPhone || "",
+        reassignedMechanicCode:
+          selectedMech?.mechanicId || selectedMech?.kyc?.mechanicId || selectedDispute.reassignedMechanicCode || "",
+        reassignedMechanicId: reassignMechanicId,
+        reassignedAt: new Date().toISOString(),
         reassignDate,
         reassignTime,
       };
@@ -300,6 +377,12 @@ const AdminDisputePage = () => {
   const getStatusStepIndex = (status) => {
     const idx = STATUS_FLOW.indexOf(status);
     return idx >= 0 ? idx : 0;
+  };
+
+  const openChatModal = async () => {
+    if (!selectedDispute || !isChatAvailable(selectedDispute.status)) return;
+    setChatModalOpen(true);
+    await fetchDisputeChat(selectedDispute.bookingId);
   };
 
   const goToServiceTicket = (bookingId) => {
@@ -444,7 +527,7 @@ const AdminDisputePage = () => {
 
       {selectedDispute && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-5xl rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="p-5 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="space-y-2">
                 <h2 className="font-semibold">Dispute Details</h2>
@@ -453,6 +536,15 @@ const AdminDisputePage = () => {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {isChatAvailable(selectedDispute.status) && (
+                  <button
+                    type="button"
+                    onClick={openChatModal}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg"
+                  >
+                    Support Chat
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setRemarksOpen((prev) => !prev)}
@@ -506,36 +598,6 @@ const AdminDisputePage = () => {
                 </div>
               </div>
 
-              {selectedDispute.reassignedMechanicName && (
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <UserCog size={16} className="text-blue-600" />
-                    <h3 className="font-medium text-blue-900">Reassigned Mechanic</h3>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-blue-700">New Mechanic</p>
-                      <p className="font-medium text-gray-900">{selectedDispute.reassignedMechanicName}</p>
-                      {selectedDispute.reassignedMechanicCode && (
-                        <p className="text-xs text-gray-500 font-mono mt-0.5">
-                          {selectedDispute.reassignedMechanicCode}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs text-blue-700">Reassigned On</p>
-                      <p className="text-sm text-gray-900">{formatDate(selectedDispute.reassignedAt)}</p>
-                      {selectedDispute.reassignDate && (
-                        <p className="text-xs text-gray-500 mt-1">Date: {selectedDispute.reassignDate}</p>
-                      )}
-                      {selectedDispute.reassignTime && (
-                        <p className="text-xs text-gray-500">Time: {selectedDispute.reassignTime}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-medium">Status</h3>
@@ -565,6 +627,7 @@ const AdminDisputePage = () => {
                   );
                 })}
               </div>
+
 
               <p className="text-sm text-gray-700">
                 <strong>Reason:</strong> {selectedDispute.reason}
@@ -643,71 +706,96 @@ const AdminDisputePage = () => {
                 </div>
               )}
 
-              {!selectedDispute.reassignedMechanicName ? (
-                <div className="pt-2 border-t space-y-3">
-                  <div className="flex items-center gap-2">
+              {selectedDispute.reassignedMechanicName && (
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
                     <UserCog size={16} className="text-blue-600" />
-                    <h3 className="font-medium">Reassign Mechanic</h3>
+                    <h3 className="font-medium text-blue-900">Current Reassigned Mechanic</h3>
                   </div>
-                  <select
-                    value={reassignMechanicId}
-                    onChange={(e) => setReassignMechanicId(e.target.value)}
-                    className="w-full border rounded-lg px-4 py-2"
-                  >
-                    <option value="">Select new mechanic</option>
-                    {approvedMechanics.map((m) => {
-                      const mechanicUserId = m.id || m.userId;
-                      const mechanicCode = m.mechanicId || m.kyc?.mechanicId || "";
-                      return (
-                        <option key={mechanicUserId} value={mechanicUserId}>
-                          {mechanicCode ? `${mechanicCode} — ` : ""}
-                          {m.fullName || m.name}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <textarea
-                    value={reassignRemark}
-                    onChange={(e) => setReassignRemark(e.target.value)}
-                    placeholder="Admin remark (e.g. Assigned new mechanic due to customer complaint)"
-                    rows={2}
-                    className="w-full border rounded-lg px-4 py-2 resize-none"
-                  />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <label className="text-xs text-gray-500">Date of reassignment</label>
-                      <input
-                        type="date"
-                        value={reassignDate}
-                        onChange={(e) => setReassignDate(e.target.value)}
-                        className="w-full mt-1 border rounded-lg px-3 py-2"
-                      />
+                      <p className="text-xs font-bold text-blue-700">Mechanic Details</p>
+                      <p className="font-medium text-gray-900">Name: {selectedDispute.reassignedMechanicName}</p>
+                      <p className="font-medium text-gray-900">Phone: {selectedDispute.reassignedMechanicPhone}</p>
+                      {selectedDispute.reassignedMechanicCode && (
+                        <p className="text-md text-gray-800 font-medium">
+                          Code: {selectedDispute.reassignedMechanicCode}
+                        </p>
+                      )}
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">Time of reassignment</label>
-                      <input
-                        type="time"
-                        value={reassignTime}
-                        onChange={(e) => setReassignTime(e.target.value)}
-                        className="w-full mt-1 border rounded-lg px-3 py-2"
-                      />
+                      <p className="text-xs font-bold text-blue-700">Date & Time</p>
+                      <p className="text-xs text-gray-900">Reassigned On: {formatDate(selectedDispute.reassignedAt)}</p>
+                      {selectedDispute.reassignDate && (
+                        <p className="text-xs font-bold text-red-900 mt-1">Revisit Date: {selectedDispute.reassignDate}</p>
+                      )}
+                      {selectedDispute.reassignTime && (
+                        <p className="text-xs font-bold text-red-900">Revisit Time: {selectedDispute.reassignTime}</p>
+                      )}
                     </div>
                   </div>
-                  <button
-                    onClick={reassignMechanic}
-                    disabled={reassigning || !reassignMechanicId}
-                    className="w-full bg-blue-600 text-white py-3 rounded-xl disabled:opacity-50 hover:bg-blue-700"
-                  >
-                    {reassigning ? "Reassigning..." : "Reassign Mechanic"}
-                  </button>
-                </div>
-              ) : (
-                <div className="pt-2 border-t">
-                  <p className="text-sm text-gray-600 mb-3">
-                    ✓ Mechanic already reassigned.
-                  </p>
                 </div>
               )}
+
+              <div className="pt-2 border-t space-y-3">
+                <div className="flex items-center gap-2">
+                  <UserCog size={16} className="text-blue-600" />
+                  <h3 className="font-medium">
+                    {selectedDispute.reassignedMechanicName ? "Update Reassignment" : "Reassign Mechanic"}
+                  </h3>
+                </div>
+                <select
+                  value={reassignMechanicId}
+                  onChange={(e) => setReassignMechanicId(e.target.value)}
+                  className="w-full border rounded-lg px-4 py-2"
+                >
+                  <option value="">Select mechanic</option>
+                  {approvedMechanics.map((m) => {
+                    const mechanicUserId = m.id || m.userId;
+                    const mechanicCode = m.mechanicId || m.kyc?.mechanicId || "";
+                    return (
+                      <option key={mechanicUserId} value={mechanicUserId}>
+                        {mechanicCode ? `${mechanicCode} — ` : ""}
+                        {m.fullName || m.name}
+                      </option>
+                    );
+                  })}
+                </select>
+                <textarea
+                  value={reassignRemark}
+                  onChange={(e) => setReassignRemark(e.target.value)}
+                  placeholder="Admin remark (e.g. Mechanic changed due to customer request.)"
+                  rows={2}
+                  className="w-full border rounded-lg px-4 py-2 resize-none"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500">Date of reassignment</label>
+                    <input
+                      type="date"
+                      value={reassignDate}
+                      onChange={(e) => setReassignDate(e.target.value)}
+                      className="w-full mt-1 border rounded-lg px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500">Time of reassignment</label>
+                    <input
+                      type="time"
+                      value={reassignTime}
+                      onChange={(e) => setReassignTime(e.target.value)}
+                      className="w-full mt-1 border rounded-lg px-3 py-2"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={reassignMechanic}
+                  disabled={reassigning || !reassignMechanicId}
+                  className="w-full bg-blue-600 text-white py-3 rounded-xl disabled:opacity-50 hover:bg-blue-700"
+                >
+                  {reassigning ? "Reassigning..." : selectedDispute.reassignedMechanicName ? "Update Reassignment" : "Reassign Mechanic"}
+                </button>
+              </div>
 
               <div className="pt-2 border-t space-y-3">
                 <h3 className="font-medium">Update Status</h3>
@@ -735,6 +823,86 @@ const AdminDisputePage = () => {
                   className="w-full bg-red-600 text-white py-3 rounded-xl disabled:opacity-50"
                 >
                   {updating ? "Updating..." : "Update Dispute"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedDispute && chatModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden max-h-[90vh] shadow-2xl">
+            <div className="p-5 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Support Chat</h3>
+                <p className="text-xs text-gray-500">
+                  Chat messages for booking {selectedDispute.bookingId}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChatModalOpen(false)}
+                className="text-gray-500 hover:text-gray-800"
+              >
+                <X />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {chatError && (
+                <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+                  {chatError}
+                </div>
+              )}
+
+              {chatSuccess && (
+                <div className="p-3 rounded-lg bg-green-50 text-green-700 text-sm border border-green-200">
+                  {chatSuccess}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 max-h-[45vh] overflow-y-auto">
+                {chatLoading ? (
+                  <p className="text-sm text-gray-500">Loading chat...</p>
+                ) : chatMessages.length ? (
+                  chatMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`rounded-2xl border p-4 max-w-[85%] ${
+                        message.senderType === "admin"
+                          ? "self-end bg-white border-red-200 text-red-600"
+                          : "self-start bg-red-600 border-red-700 text-white"
+                      }`}
+                    >
+                      <div className={`flex items-center justify-between gap-3 mb-2 text-[11px] font-semibold ${message.senderType === "admin" ? "text-red-600" : "text-white/80"}`}>
+                        <span>{message.senderType === "admin" ? "Admin" : "Customer"}</span>
+                        <span>{formatDate(message.createdAt)}</span>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">
+                        {message.message}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No chat messages yet.</p>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Write a reply..."
+                  rows={4}
+                  className="w-full border rounded-lg px-4 py-3 resize-none"
+                />
+                <button
+                  onClick={sendChatMessage}
+                  disabled={chatPosting || !chatInput.trim()}
+                  className="w-full bg-red-600 text-white py-3 rounded-xl disabled:opacity-50"
+                >
+                  {chatPosting ? "Sending..." : "Send Reply"}
                 </button>
               </div>
             </div>
