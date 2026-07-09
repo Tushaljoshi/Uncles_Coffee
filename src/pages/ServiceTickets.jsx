@@ -249,15 +249,39 @@ const getStatusStyle = (status) => {
   return map[status] || "bg-gray-100 text-gray-600";
 };
 
+const getServiceStatusDisplay = (booking) => {
+  const normalizedStatus = String(booking?.status || "").toLowerCase();
+  const completedStatuses = new Set(["complete", "completed", "work_done", "done"]);
+
+  if (completedStatuses.has(normalizedStatus)) {
+    const paymentStatus = String(booking?.payment?.status || booking?.payment?.paymentStatus || "").toLowerCase();
+    if (paymentStatus === "paid") {
+      return {
+        label: "Paid",
+        style: "bg-green-100 text-green-700",
+      };
+    }
+
+    return {
+      label: "Unpaid",
+      style: "bg-amber-100 text-amber-800",
+    };
+  }
+
+  return {
+    label: formatStatus(booking?.status),
+    style: getStatusStyle(booking?.status),
+  };
+};
+
 const getDisputeStatusStyle = (status) => {
   const map = {
-    raised: "bg-yellow-100 text-yellow-800",
-    pending: "bg-amber-100 text-amber-800",
-    resolved: "bg-emerald-100 text-emerald-800",
-    rejected: "bg-red-100 text-red-700",
-    closed: "bg-slate-100 text-slate-700",
+    raised: "bg-red-100 text-red-700 border border-red-200",
+    under_review: "bg-amber-100 text-amber-800 border border-amber-200",
+    resolution_in_progress: "bg-blue-100 text-blue-700 border border-blue-200",
+    resolved: "bg-green-100 text-green-700 border border-green-200",
   };
-  return map[status] || "bg-gray-100 text-gray-600";
+  return map[status] || "bg-gray-100 text-gray-600 border border-gray-200";
 };
 
 const getBookingTypeStyle = (type) => {
@@ -1191,7 +1215,9 @@ const ServiceTickets = () => {
                           <td className="p-2 sm:p-3 text-center">
                             {b.dispute?.isRaised ? (
                               <div className="flex flex-col items-center gap-1">
-                                <span className="text-[9px] sm:text-[10px] font-semibold text-red-700">Raised</span>
+                                <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-semibold border ${getDisputeStatusStyle(b.dispute?.status || "raised")}`}>
+                                  {formatStatus(b.dispute?.status || "raised")}
+                                </span>
                                 <button
                                   onClick={() => navigate(`/dispute?bookingId=${encodeURIComponent(b.bookingId)}`)}
                                   className="text-[10px] sm:text-[11px] text-white bg-red-600 hover:bg-red-700 px-2 py-1 rounded-lg"
@@ -1210,9 +1236,9 @@ const ServiceTickets = () => {
                           </td>
                           <td className="p-2 sm:p-3 text-center">
                             <span
-                              className={`text-[8px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${getStatusStyle(b.status)}`}
+                              className={`text-[8px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${getServiceStatusDisplay(b).style}`}
                             >
-                              {formatStatus(b.status)}
+                              {getServiceStatusDisplay(b).label}
                             </span>
                           </td>
                           <td className="p-2 sm:p-3 text-center">

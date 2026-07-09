@@ -115,6 +115,31 @@ const ListItemSkeleton = () => (
 );
 
 const CreateService = () => {
+  // Helper component to show truncated text with Show more / Show less
+  const TypeText = ({ text, className }) => {
+    const [expanded, setExpanded] = useState(false);
+    const [maxChars, setMaxChars] = useState(() => (typeof window !== 'undefined' && window.innerWidth < 640 ? 150 : 300));
+
+    useEffect(() => {
+      const onResize = () => setMaxChars(window.innerWidth < 640 ? 150 : 300);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    if (!text) return null;
+
+    const needsTruncate = text.length > maxChars;
+    return (
+      <>
+        <p className={className}>{expanded || !needsTruncate ? text : `${text.slice(0, maxChars)}...`}</p>
+        {needsTruncate && (
+          <button type="button" onClick={() => setExpanded(!expanded)} className="text-md font-bold text-red-600 underline ml-1">
+            {expanded ? 'Show less' : 'Show more'}
+          </button>
+        )}
+      </>
+    );
+  };
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [activeTab, setActiveTab] = useState("vehicle");
   const [showModal, setShowModal] = useState(false);
@@ -142,13 +167,13 @@ const CreateService = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [itemName, setItemName] = useState("");
+  const [subdescription, setSubdescription] = useState("");
   const [itemPrice, setItemPrice] = useState("");
   const [itemDiscountPrice, setItemDiscountPrice] = useState("");
   const [estimatedTime, setEstimatedTime] = useState("");
   const [itemDesc, setItemDesc] = useState("");
   const [iconFile, setIconFile] = useState(null);
   const [iconPreview, setIconPreview] = useState(null);
-
   const [categories, setCategories] = useState({ vehicle: [], equipment: [] });
   // Brand states
   const [showBrandModal, setShowBrandModal] = useState(false);
@@ -228,7 +253,7 @@ const CreateService = () => {
         (Array.isArray(services) ? services : []).map(async (s) => {
           const aggregatedTypes = [];
           const typeMap = new Map(); // Map to deduplicate by type ID
-          
+
           for (const brand of Array.isArray(brands) ? brands : []) {
             let models = [];
             try {
@@ -920,6 +945,7 @@ const CreateService = () => {
         updateTypeFormData.append("discountPrice", itemDiscountPrice || 0);
         updateTypeFormData.append("estimatedTime", estimatedTime);
         updateTypeFormData.append("description", itemDesc);
+        updateTypeFormData.append("subdescription", subdescription);
         const mappings = [];
         for (const brandId of selectedBrandIds || []) {
           const setForBrand = selectedModelIdsByBrand[brandId];
@@ -990,6 +1016,7 @@ const CreateService = () => {
         formData.append("price", itemPrice);
         formData.append("discountPrice", itemDiscountPrice || 0);
         formData.append("description", itemDesc || "");
+        formData.append("subdescription", subdescription || "");
         formData.append("estimatedTime", estimatedTime || "");
         formData.append("vehicleMappings", JSON.stringify(mappings));
         if (iconFile) formData.append("image", iconFile);
@@ -1046,6 +1073,7 @@ const CreateService = () => {
     setItemPrice("");
     setItemDiscountPrice("");
     setItemDesc("");
+    setSubdescription("");
     setEstimatedTime("");
     setSelectedCategoryId("");
     setSelectedServiceId("");
@@ -1087,6 +1115,7 @@ const CreateService = () => {
     setItemPrice(type.price || "");
     setItemDiscountPrice(type.discountPrice ?? type.discount_price ?? 0);
     setItemDesc(type.description || "");
+    setSubdescription(type.subdescription || "");
     setEstimatedTime(type.estimatedTime || "");
     setIconPreview(type.image || type.image_url || type.imageUrl || null);
 
@@ -1221,7 +1250,7 @@ const CreateService = () => {
               </button>
               {activeTab === "vehicle" && (
                 <button onClick={() => { resetModal(); setModalMode("type"); setShowModal(true); }} className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                New Service Type
+                  New Service Type
                 </button>
               )}
             </div>
@@ -1245,202 +1274,205 @@ const CreateService = () => {
                 No {activeTab} categories found.
               </div>
             ) : (
-            categories[activeTab]?.map(category => (
-              <div key={category.id} className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                {/* Accordion Header (Card click karne par toggle hoga) */}
-                <div
-                  onClick={() => toggleExpand(category.id)}
-                  className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="bg-red-50 p-2 rounded-lg overflow-hidden">
-                      {(category.icon || category.iconUrl) ? (
-                        <img
-                          src={category.icon || category.iconUrl}
-                          alt={`${category.name} icon`}
-                          className="w-8 h-8 object-contain"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <Folder size={20} className="text-red-600" />
-                      )}
-                    </div>
-                    <h3 className="text-lg font-bold text-gray-800">{category.name}</h3>
-                    <span className="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-500">
-                      {category.detailsLoaded || activeTab === "equipment"
-                        ? `${category.items?.length ?? 0} Services`
-                        : loadingVehicleIds.has(category.id)
-                          ? "Loading..."
-                          : "Expand to load"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditVehicleModal(category);
-                      }}
-                      className="p-2 rounded-lg hover:bg-gray-100"
-                    >
-                      <Edit2 size={18} className="text-gray-500" />
-                    </button>
-                    {activeTab === "vehicle" && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openBrandsModal(category.id);
-                        }}
-                        className="p-2 rounded-lg hover:bg-gray-100"
-                        title="Manage Brands"
-                      >
-                        <Plus size={16} className="text-gray-500" />
-                      </button>
-                    )}
-                    {activeTab === "vehicle" && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!window.confirm("Delete this vehicle and all its services?")) return;
-                          handleDeleteVehicle(category.id);
-                        }}
-                        className="p-2 rounded-lg hover:bg-gray-100"
-                        title="Delete Vehicle"
-                      >
-                        <Trash2 size={18} className="text-gray-500" />
-                      </button>
-                    )}
-                    {expandedId === category.id ? <ChevronUp className="text-gray-400" /> : <ChevronDown className="text-gray-400" />}
-                  </div>
-                </div>
-
-                {/* Accordion Body (Expanded hone par hi dikhega) */}
-                {expandedId === category.id && (
-                  loadingVehicleIds.has(category.id) || (activeTab === "vehicle" && !category.detailsLoaded) ? (
-                    <ServiceListSkeleton />
-                  ) : (
-                  <div className="p-4 border-t bg-gray-50/50 space-y-4 animate-in fade-in slide-in-from-top-2">
-                    {category.items.length === 0 ? (
-                      <p className="text-center text-gray-400 text-sm py-4">No services added yet.</p>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-4">
-                        {category.items.map(item => (
-                          <div key={item.id} className="border rounded-lg p-4 bg-white shadow-sm">
-                            <div className="flex items-center justify-between font-semibold mb-3 border-b pb-2">
-                              <div className="flex items-center gap-3">
-                                <img src={item.iconUrl || item.icon || item.icon_url} className="w-8 h-8 object-contain" alt={item.name || "service icon"} loading="lazy" />
-                                <span className="flex-1 text-gray-700">{item.name}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => activeTab === "equipment" ? openEditEquipmentModal(item) : openEditServiceModal(item, category.id)}
-                                  className="p-2 rounded-lg hover:bg-gray-100"
-                                  title={activeTab === "equipment" ? "Edit Equipment" : "Edit Service"}
-                                >
-                                  <Edit2 size={18} className="text-gray-500" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!window.confirm(activeTab === "equipment" ? "Delete this equipment?" : "Delete this service?")) return;
-                                    if (activeTab === "equipment") {
-                                      handleDeleteEquipment(item.id);
-                                    } else {
-                                      handleDeleteService(category.id, item.id);
-                                    }
-                                  }}
-                                  className="p-2 rounded-lg hover:bg-gray-100"
-                                  title={activeTab === "equipment" ? "Delete Equipment" : "Delete Service"}
-                                >
-                                  <Trash2 size={18} className="text-gray-500" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Service Types inside the Service with brand/model filters */}
-                            <div className="space-y-3">
-                              <div className="flex items-center gap-3">
-                                <label className="text-sm font-medium">Filter:</label>
-                                <select className="border p-2 rounded-lg" value={selectedBrandByService[item.id] || ''} onChange={(e) => handleFilterBrandChange(item.id, category.id, e.target.value)}>
-                                  <option value="">Show All Brands</option>
-                                  {(vehicleBrands[category.id] || []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                </select>
-
-                                <select className="border p-2 rounded-lg" value={selectedModelByService[item.id] || ''} onChange={(e) => handleFilterModelChange(item.id, category.id, selectedBrandByService[item.id], e.target.value)} disabled={!selectedBrandByService[item.id]}>
-                                  <option value="">Show All Models</option>
-                                  {(modelsByBrand[selectedBrandByService[item.id]] || []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
-                              </div>
-
-                              {/* Types list: either filtered or aggregated */}
-                              {loadingFilteredTypesByService[item.id] ? (
-                                <div className="text-sm text-gray-500">Loading types...</div>
-                              ) : (filteredTypesByService[item.id] && Array.isArray(filteredTypesByService[item.id]) ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                  {filteredTypesByService[item.id].map(type => (
-                                    <div key={type.id} className="bg-gray-50 p-3 rounded border flex items-center justify-between gap-3 group">
-                                      <div className="flex items-center gap-3 flex-1">
-                                        <img src={type.imageUrl || type.image || type.image_url} className="w-10 h-10 rounded object-cover" alt="" />
-                                        <div className="text-sm">
-                                          <p className="font-bold text-gray-800">{type.name}</p>
-                                          <p className="font-bold text-gray-800">{type.description}</p>
-                                          <p className="text-sm text-gray-500">{type.estimatedTime ? `Estimated Time: ${type.estimatedTime}` : ''}</p>
-                                          {/* {(type._brandName || type._modelName) && (
-                                            <p className="text-xs text-gray-500">{type._brandName ? `Brand: ${type._brandName}` : ''}{type._brandName && type._modelName ? ' | ' : ''}{type._modelName ? `Model: ${type._modelName}` : ''}</p>
-                                          )} */}
-                                          <p className="text-red-600 font-semibold"> Original Price: ₹{type.price}</p>
-                                          {((type.discountPrice ?? type.discount_price) || 0) > 0 && (
-                                            <p className="text-sm font-medium text-green-600">Discount Price: ₹{type.discountPrice ?? type.discount_price}</p>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="flex gap-2">
-                                        <button type="button" onClick={() => openEditTypeModal(type, item.id, category.id)} className="p-1 rounded hover:bg-gray-200" title="Edit Service Type"><Edit2 size={16} className="text-gray-600" /></button>
-                                        <button type="button" onClick={() => { if (!window.confirm("Delete this service type?")) return; handleDeleteType(category.id, item.id, type.id); }} className="p-1 rounded hover:bg-gray-200" title="Delete Service Type"><Trash2 size={16} className="text-gray-600" /></button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                  {item.types.map(type => (
-                                    <div key={type.id} className="bg-gray-50 p-3 rounded border flex items-center justify-between gap-3 group">
-                                      <div className="flex items-center gap-3 flex-1">
-                                        <img src={type.imageUrl} className="w-10 h-10 rounded object-cover" alt="" />
-                                        <div className="text-sm">
-                                          <p className="font-bold text-gray-800">{type.name}</p>
-                                          <p className="font-bold text-gray-800">{type.description}</p>
-                                          <p className="text-sm text-gray-500">{type.estimatedTime ? `Estimated Time: ${type.estimatedTime}` : ''}</p>
-                                          {/* {(type._brandName || type._modelName) && (
-                                            <p className="text-xs text-gray-500">{type._brandName ? `Brand: ${type._brandName}` : ''}{type._brandName && type._modelName ? ' | ' : ''}{type._modelName ? `Model: ${type._modelName}` : ''}</p>
-                                          )} */}
-                                          <p className="text-red-600 font-semibold"> Original Price: ₹{type.price}</p>
-                                          {((type.discountPrice ?? type.discount_price) || 0) > 0 && (
-                                            <p className="text-sm font-medium text-green-600">Discount Price: ₹{type.discountPrice ?? type.discount_price}</p>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="flex gap-2">
-                                        <button type="button" onClick={() => openEditTypeModal(type, item.id, category.id)} className="p-1 rounded hover:bg-gray-200" title="Edit Service Type"><Edit2 size={16} className="text-gray-600" /></button>
-                                        <button type="button" onClick={() => { if (!window.confirm("Delete this service type?")) return; handleDeleteType(category.id, item.id, type.id); }} className="p-1 rounded hover:bg-gray-200" title="Delete Service Type"><Trash2 size={16} className="text-gray-600" /></button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
+              categories[activeTab]?.map(category => (
+                <div key={category.id} className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                  {/* Accordion Header (Card click karne par toggle hoga) */}
+                  <div
+                    onClick={() => toggleExpand(category.id)}
+                    className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="bg-red-50 p-2 rounded-lg overflow-hidden">
+                        {(category.icon || category.iconUrl) ? (
+                          <img
+                            src={category.icon || category.iconUrl}
+                            alt={`${category.name} icon`}
+                            className="w-8 h-8 object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <Folder size={20} className="text-red-600" />
+                        )}
                       </div>
-                    )}
+                      <h3 className="text-lg font-bold text-gray-800">{category.name}</h3>
+                      <span className="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-500">
+                        {category.detailsLoaded || activeTab === "equipment"
+                          ? `${category.items?.length ?? 0} Services`
+                          : loadingVehicleIds.has(category.id)
+                            ? "Loading..."
+                            : "Expand to load"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditVehicleModal(category);
+                        }}
+                        className="p-2 rounded-lg hover:bg-gray-100"
+                      >
+                        <Edit2 size={18} className="text-gray-500" />
+                      </button>
+                      {activeTab === "vehicle" && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openBrandsModal(category.id);
+                          }}
+                          className="p-2 rounded-lg hover:bg-gray-100"
+                          title="Manage Brands"
+                        >
+                          <Plus size={16} className="text-gray-500" />
+                        </button>
+                      )}
+                      {activeTab === "vehicle" && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!window.confirm("Delete this vehicle and all its services?")) return;
+                            handleDeleteVehicle(category.id);
+                          }}
+                          className="p-2 rounded-lg hover:bg-gray-100"
+                          title="Delete Vehicle"
+                        >
+                          <Trash2 size={18} className="text-gray-500" />
+                        </button>
+                      )}
+                      {expandedId === category.id ? <ChevronUp className="text-gray-400" /> : <ChevronDown className="text-gray-400" />}
+                    </div>
                   </div>
-                  )
-                )}
-              </div>
-            ))
+
+                  {/* Accordion Body (Expanded hone par hi dikhega) */}
+                  {expandedId === category.id && (
+                    loadingVehicleIds.has(category.id) || (activeTab === "vehicle" && !category.detailsLoaded) ? (
+                      <ServiceListSkeleton />
+                    ) : (
+                      <div className="p-4 border-t bg-gray-50/50 space-y-4 animate-in fade-in slide-in-from-top-2">
+                        {category.items.length === 0 ? (
+                          <p className="text-center text-gray-400 text-sm py-4">No services added yet.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-4">
+                            {category.items.map(item => (
+                              <div key={item.id} className="border rounded-lg p-4 bg-white shadow-sm">
+                                <div className="flex items-center justify-between font-semibold mb-3 border-b pb-2">
+                                  <div className="flex items-center gap-3">
+                                    <img src={item.iconUrl || item.icon || item.icon_url} className="w-8 h-8 object-contain" alt={item.name || "service icon"} loading="lazy" />
+                                    <span className="flex-1 text-gray-700">{item.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => activeTab === "equipment" ? openEditEquipmentModal(item) : openEditServiceModal(item, category.id)}
+                                      className="p-2 rounded-lg hover:bg-gray-100"
+                                      title={activeTab === "equipment" ? "Edit Equipment" : "Edit Service"}
+                                    >
+                                      <Edit2 size={18} className="text-gray-500" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!window.confirm(activeTab === "equipment" ? "Delete this equipment?" : "Delete this service?")) return;
+                                        if (activeTab === "equipment") {
+                                          handleDeleteEquipment(item.id);
+                                        } else {
+                                          handleDeleteService(category.id, item.id);
+                                        }
+                                      }}
+                                      className="p-2 rounded-lg hover:bg-gray-100"
+                                      title={activeTab === "equipment" ? "Delete Equipment" : "Delete Service"}
+                                    >
+                                      <Trash2 size={18} className="text-gray-500" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Service Types inside the Service with brand/model filters */}
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-3">
+                                    <label className="text-sm font-medium">Filter:</label>
+                                    <select className="border p-2 rounded-lg" value={selectedBrandByService[item.id] || ''} onChange={(e) => handleFilterBrandChange(item.id, category.id, e.target.value)}>
+                                      <option value="">Show All Brands</option>
+                                      {(vehicleBrands[category.id] || []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </select>
+
+                                    <select className="border p-2 rounded-lg" value={selectedModelByService[item.id] || ''} onChange={(e) => handleFilterModelChange(item.id, category.id, selectedBrandByService[item.id], e.target.value)} disabled={!selectedBrandByService[item.id]}>
+                                      <option value="">Show All Models</option>
+                                      {(modelsByBrand[selectedBrandByService[item.id]] || []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    </select>
+                                  </div>
+
+                                  {/* Types list: either filtered or aggregated */}
+                                  {loadingFilteredTypesByService[item.id] ? (
+                                    <div className="text-sm text-gray-500">Loading types...</div>
+                                  ) : (filteredTypesByService[item.id] && Array.isArray(filteredTypesByService[item.id]) ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                      {filteredTypesByService[item.id].map(type => (
+                                        <div key={type.id} className="bg-gray-50 p-3 rounded border flex items-center justify-between gap-3 group">
+                                          <div className="flex items-center gap-3 flex-1">
+                                            <img src={type.imageUrl || type.image || type.image_url} className="w-10 h-10 rounded object-cover" alt="" />
+                                            <div className="text-sm">
+                                              <p className="font-bold text-gray-800">{type.name}</p>
+
+                                              <p className="font-semibold text-gray-800">{type.subdescription}</p>
+                                              <TypeText text={type.description} className="font-bold text-gray-800" />
+                                              <p className="text-sm text-gray-500">{type.estimatedTime ? `Estimated Time: ${type.estimatedTime}` : ''}</p>
+                                              {/* {(type._brandName || type._modelName) && (
+                                            <p className="text-xs text-gray-500">{type._brandName ? `Brand: ${type._brandName}` : ''}{type._brandName && type._modelName ? ' | ' : ''}{type._modelName ? `Model: ${type._modelName}` : ''}</p>
+                                          )} */}
+                                              <p className="text-red-600 font-semibold"> Original Price: ₹{type.price}</p>
+                                              {((type.discountPrice ?? type.discount_price) || 0) > 0 && (
+                                                <p className="text-sm font-medium text-green-600">Discount Price: ₹{type.discountPrice ?? type.discount_price}</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="flex gap-2">
+                                            <button type="button" onClick={() => openEditTypeModal(type, item.id, category.id)} className="p-1 rounded hover:bg-gray-200" title="Edit Service Type"><Edit2 size={16} className="text-gray-600" /></button>
+                                            <button type="button" onClick={() => { if (!window.confirm("Delete this service type?")) return; handleDeleteType(category.id, item.id, type.id); }} className="p-1 rounded hover:bg-gray-200" title="Delete Service Type"><Trash2 size={16} className="text-gray-600" /></button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                      {item.types.map(type => (
+                                        <div key={type.id} className="bg-gray-50 p-3 rounded border flex items-center justify-between gap-3 group">
+                                          <div className="flex items-center gap-3 flex-1">
+                                            <img src={type.imageUrl} className="w-10 h-10 rounded object-cover" alt="" />
+                                            <div className="text-sm">
+                                              <p className="font-bold text-gray-800">{type.name}</p>
+                                              <p className="font-semibold text-gray-700">{type.subdescription}</p>
+                                              <TypeText text={type.description} className="font-bold text-gray-600" />
+                                              <p className="text-sm text-gray-500">{type.estimatedTime ? `Estimated Time: ${type.estimatedTime}` : ''}</p>
+                                              {/* {(type._brandName || type._modelName) && (
+                                            <p className="text-xs text-gray-500">{type._brandName ? `Brand: ${type._brandName}` : ''}{type._brandName && type._modelName ? ' | ' : ''}{type._modelName ? `Model: ${type._modelName}` : ''}</p>
+                                          )} */}
+                                              <p className="text-red-600 font-semibold"> Original Price: ₹{type.price}</p>
+                                              {((type.discountPrice ?? type.discount_price) || 0) > 0 && (
+                                                <p className="text-sm font-medium text-green-600">Discount Price: ₹{type.discountPrice ?? type.discount_price}</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="flex gap-2">
+                                            <button type="button" onClick={() => openEditTypeModal(type, item.id, category.id)} className="p-1 rounded hover:bg-gray-200" title="Edit Service Type"><Edit2 size={16} className="text-gray-600" /></button>
+                                            <button type="button" onClick={() => { if (!window.confirm("Delete this service type?")) return; handleDeleteType(category.id, item.id, type.id); }} className="p-1 rounded hover:bg-gray-200" title="Delete Service Type"><Trash2 size={16} className="text-gray-600" /></button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              ))
             )}
           </div>
         </main>
@@ -1455,16 +1487,16 @@ const CreateService = () => {
                 {modalMode === "type"
                   ? "Add Service Type"
                   : modalMode === "editType"
-                  ? "Edit Service Type"
-                  : modalMode === "vehicle"
-                  ? "Add Vehicle"
-                  : modalMode === "editVehicle"
-                  ? "Edit Vehicle"
-                  : modalMode === "editService"
-                  ? "Edit Service"
-                  : modalMode === "editEquipment"
-                  ? "Edit Equipment"
-                  : "Add Service"}
+                    ? "Edit Service Type"
+                    : modalMode === "vehicle"
+                      ? "Add Vehicle"
+                      : modalMode === "editVehicle"
+                        ? "Edit Vehicle"
+                        : modalMode === "editService"
+                          ? "Edit Service"
+                          : modalMode === "editEquipment"
+                            ? "Edit Equipment"
+                            : "Add Service"}
               </h3>
               <X className="cursor-pointer hover:text-red-600" onClick={() => setShowModal(false)} />
             </div>
@@ -1476,10 +1508,20 @@ const CreateService = () => {
                     <label className="block text-sm font-medium mb-1">Type Name</label>
                     <input
                       type="text"
-                      placeholder="Type Name"
+                      placeholder="Basic Service"
                       className="w-full border p-2 rounded-lg"
                       value={itemName}
                       onChange={(e) => setItemName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Subdescription (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="(Every 3,000 km or 3 Months)"
+                      className="w-full border p-2 rounded-lg"
+                      value={subdescription}
+                      onChange={(e) => setSubdescription(e.target.value)}
                     />
                   </div>
                   <div>
@@ -1505,7 +1547,7 @@ const CreateService = () => {
                   <div>
                     <label className="block text-sm font-medium mb-1">Description</label>
                     <textarea
-                      placeholder="Description"
+                      placeholder="What's Included: Engine oil level............"
                       className="w-full border p-2 rounded-lg"
                       value={itemDesc}
                       onChange={(e) => setItemDesc(e.target.value)}
@@ -1576,7 +1618,14 @@ const CreateService = () => {
                       ))}
                     </select>
                   </div>
-
+                  <div>
+                      <label className="block text-sm font-medium mb-1">Type Name</label>
+                      <input type="text" placeholder="Basic Service" className="w-full border p-2 rounded-lg" value={itemName} onChange={(e) => setItemName(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">SubDescription (Optional)</label>
+                    <textarea placeholder="(Every 3,000 km or 3 Months)" className="w-full border p-2 rounded-lg" value={subdescription} onChange={(e) => setSubdescription(e.target.value)} />
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium mb-1">Price</label>
@@ -1588,9 +1637,10 @@ const CreateService = () => {
                     </div>
                   </div>
 
+
                   <div>
                     <label className="block text-sm font-medium mb-1">Description</label>
-                    <textarea placeholder="Description" className="w-full border p-2 rounded-lg" value={itemDesc} onChange={(e) => setItemDesc(e.target.value)} />
+                    <textarea placeholder="What's Included: Engine oil level................." className="w-full border p-2 rounded-lg" value={itemDesc} onChange={(e) => setItemDesc(e.target.value)} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Estimated Time</label>
@@ -1721,60 +1771,6 @@ const CreateService = () => {
                   )}
                 </>
               )}
-
-              {modalMode !== "vehicle" && modalMode !== "editVehicle" && modalMode !== "editType" && modalMode !== "editEquipment" && (
-                <input
-                  type="text"
-                  placeholder="Name"
-                  className="w-full border p-2 rounded-lg"
-                  onChange={(e) => setItemName(e.target.value)}
-                />
-              )}
-
-              {modalMode !== "editType" && modalMode !== "editEquipment" && (
-              <div>
-                <label className="block text-sm font-medium mb-1">Upload Icon/Image</label>
-                <div className="flex items-center gap-4">
-
-                  {/* Upload Button */}
-                  <label className="flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
-                    <span className="text-sm text-gray-600 font-medium">
-                      Upload Icon
-                    </span>
-                    <input
-                      type="file"
-                      onChange={handleIconUpload}
-                      className="hidden"
-                    />
-                  </label>
-
-                  {/* Preview */}
-                  {iconPreview && (
-                    <div className="relative">
-                      <img
-                        src={iconPreview}
-                        alt="preview"
-                        className="w-14 h-14 rounded-xl border shadow-sm object-cover"
-                      />
-
-                      {/* Remove Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIconFile(null);
-                          setIconPreview(null);
-                        }}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow hover:bg-red-600"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-              )}
-
               <button onClick={handleCreate} disabled={submitting} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 disabled:opacity-60">
                 {submitting ? "Processing..." : modalMode === "editService" || modalMode === "editVehicle" || modalMode === "editType" || modalMode === "editEquipment" ? "Update" : "Submit"}
               </button>

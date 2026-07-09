@@ -19,10 +19,12 @@ const EmergencyIssue = () => {
 
   const [issueType, setIssueType] = useState("");
   const [price, setPrice] = useState("");
+  const [visitCost, setVisitCost] = useState("");
 
   const [editingId, setEditingId] = useState(null);
   const [editType, setEditType] = useState("");
   const [editPrice, setEditPrice] = useState("");
+  const [editvisitCost, setEditvisitCost] = useState("");
   const [showAllModal, setShowAllModal] = useState(false);
 
   const { toasts, addToast } = useToast();
@@ -83,6 +85,7 @@ const EmergencyIssue = () => {
         body: JSON.stringify({
           vehicleId: selectedVehicleId,
           issueType,
+          visitCost: Number(visitCost) || 0,
           price: Number(price),
         }),
       });
@@ -95,6 +98,7 @@ const EmergencyIssue = () => {
           vehicleId: selectedVehicleId,
           vehicleName: selectedVehicle?.name,
           issueType,
+          visitCost: Number(visitCost) || 0,
           price: Number(price),
           createdAt,
         }, ...p]);
@@ -110,12 +114,14 @@ const EmergencyIssue = () => {
   const startEdit = (it) => {
     setEditingId(it.id);
     setEditType(it.issueType || "");
+    setEditvisitCost(it.visitCost || "");
     setEditPrice(it.price || "");
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditType("");
+    setEditvisitCost("");
     setEditPrice("");
   };
 
@@ -125,12 +131,12 @@ const EmergencyIssue = () => {
       const res = await fetch(`${API_BASE}/api/admin/VisibleIssue/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ issueType: editType, price: Number(editPrice) }),
+        body: JSON.stringify({ issueType: editType, price: Number(editPrice), visitCost: Number(editvisitCost) }),
       });
       const json = await res.json();
       if (json.success) {
         addToast("Issue updated successfully", "success");
-        setIssues((prev) => prev.map((it) => (it.id === id ? { ...it, issueType: editType, price: Number(editPrice) } : it)));
+        setIssues((prev) => prev.map((it) => (it.id === id ? { ...it, issueType: editType, price: Number(editPrice), visitCost: Number(editvisitCost) } : it)));
         cancelEdit();
       } else addToast(json.message || "Update failed", "error");
     } catch {
@@ -209,9 +215,11 @@ const EmergencyIssue = () => {
                 <input value={issueType} onChange={(e) => setIssueType(e.target.value)} className="w-full mt-1 mb-3 p-2 border rounded-md" placeholder="e.g. Dent" />
                 <label className="text-sm text-gray-600">Price</label>
                 <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" className="w-full mt-1 mb-4 p-2 border rounded-md" placeholder="300" />
+                <label className="text-sm text-gray-600">Visit Cost</label>
+                <input value={visitCost} onChange={(e) => setVisitCost(e.target.value)} type="number" className="w-full mt-1 mb-4 p-2 border rounded-md" placeholder="100" />
                 <div className="flex gap-3">
                   <button onClick={createIssue} className="flex-1 bg-red-600 text-white py-2 rounded-xl">Create</button>
-                  <button onClick={() => { setIssueType(''); setPrice(''); }} className="flex-1 border py-2 rounded-xl">Clear</button>
+                  <button onClick={() => { setIssueType(''); setPrice(''); setVisitCost(''); }} className="flex-1 border py-2 rounded-xl">Clear</button>
                 </div>
               </div>
 
@@ -246,6 +254,7 @@ const EmergencyIssue = () => {
                         <th className="py-2">Vehicle</th>
                         <th className="py-2">Issue</th>
                         <th className="py-2">Price</th>
+                        <th className="py-2">Visit Cost</th>
                         <th className="py-2">Created</th>
                         <th className="py-2">Actions</th>
                       </tr>
@@ -266,6 +275,13 @@ const EmergencyIssue = () => {
                               <input value={editPrice} onChange={(e) => setEditPrice(e.target.value)} type="number" className="p-2 border rounded-md w-full" />
                             ) : (
                               <div className="text-sm text-gray-700">₹{it.price}</div>
+                            )}
+                          </td>
+                          <td className="py-3 w-40">
+                            {editingId === it.id ? (
+                              <input value={editvisitCost} onChange={(e) => setEditvisitCost(e.target.value)} type="number" className="p-2 border rounded-md w-full" />
+                            ) : (
+                              <div className="text-sm text-gray-700">₹{it.visitCost}</div>
                             )}
                           </td>
                           <td className="py-3 text-sm text-gray-500">{formatTime(it.createdAt)}</td>
@@ -316,7 +332,8 @@ const EmergencyIssue = () => {
                         <div className="font-semibold text-gray-800">{it.issueType}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm font-medium text-gray-800">₹{it.price}</div>
+                        <div className="text-sm font-medium text-gray-800">Price: ₹{it.price}</div>
+                        <div className="text-xs text-gray-500">Visit Cost: ₹{it.visitCost}</div>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 justify-end">

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   X, Mail, Phone, Wrench, Car, FileText, Search,
   Users, Briefcase, MapPin, ShieldCheck,
-  Landmark, Smartphone
+  Landmark, Smartphone, CheckCircle2, Clock3
 } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
@@ -26,12 +26,17 @@ const AdminMechanicProfile = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [mechanics, setMechanics] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [viewMode, setViewMode] = useState("grid");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [availabilityFilter, setAvailabilityFilter] = useState("all");
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
-  useEffect(() => { fetchMechanics(); }, []);
+  useEffect(() => {
+    fetchMechanics();
+    fetchServiceBookings();
+  }, []);
 
   const fetchMechanics = async () => {
     try {
@@ -47,6 +52,18 @@ const AdminMechanicProfile = () => {
         })));
       }
     } catch (err) { console.error(err); } finally { setLoading(false); }
+  };
+
+  const fetchServiceBookings = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/servicebookings//all-Admin_bookings`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setBookings(data.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch service bookings for availability", err);
+    }
   };
 
   const fetchSingleMechanic = async (id) => {
@@ -174,11 +191,77 @@ const AdminMechanicProfile = () => {
     URL.revokeObjectURL(url);
   };
 
-  const filteredMechanics = mechanics.filter(m => {
+  const normalizeValue = (value) => String(value ?? "").toLowerCase().trim();
+
+  const getMechanicAvailability = (mechanic) => {
+    const relatedBookings = bookings.filter((booking) => {
+      const bookingMechanic = booking.mechanic || {};
+      const bookingValues = [
+        bookingMechanic.id,
+        bookingMechanic._id,
+        bookingMechanic.userId,
+        bookingMechanic.mechanicID,
+        bookingMechanic.mechanicId,
+        bookingMechanic.fullName,
+        bookingMechanic.name,
+      ]
+        .filter(Boolean)
+        .map(normalizeValue);
+
+      const mechanicValues = [
+        mechanic.id,
+        mechanic._id,
+        mechanic.userId,
+        mechanic.mechanicID,
+        mechanic.mechanicId,
+        mechanic.kyc?.mechanicId,
+        mechanic.fullName,
+        mechanic.name,
+      ]
+        .filter(Boolean)
+        .map(normalizeValue);
+
+      const sharedValue = bookingValues.some((value) => mechanicValues.includes(value));
+      if (sharedValue) return true;
+
+      const bookingName = normalizeValue(bookingMechanic.fullName || bookingMechanic.name);
+      const mechanicName = normalizeValue(mechanic.fullName || mechanic.name);
+      return Boolean(bookingName && mechanicName && bookingName === mechanicName);
+    });
+
+    const availableStatuses = new Set(["complete", "completed", "work_done", "schedule", "scheduled", "declined", "cancelled", "rejected", "closed"]);
+    const isBusy = relatedBookings.some((booking) => !availableStatuses.has(normalizeValue(booking.status)));
+
+    if (relatedBookings.length === 0) {
+      return {
+        label: "Available",
+        tone: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        available: true,
+        icon: <CheckCircle2 size={14} />,
+      };
+    }
+
+    return isBusy
+      ? {
+          label: "Busy",
+          tone: "bg-amber-50 text-amber-700 border-amber-200",
+          available: false,
+          icon: <Clock3 size={14} />,
+        }
+      : {
+          label: "Available",
+          tone: "bg-emerald-50 text-emerald-700 border-emerald-200",
+          available: true,
+          icon: <CheckCircle2 size={14} />,
+        };
+  };
+
+  const filteredMechanics = mechanics.filter((m) => {
     const mechanicId = (m.mechanicId || m.kyc?.mechanicId || m.id || "").toString().toLowerCase();
     const keyword = search.toLowerCase();
     const name = (m.name || m.fullName || "").toString().toLowerCase();
     const phone = (m.phone || "").toString();
+    const availability = getMechanicAvailability(m);
     const matchesSearch = (
       name.includes(keyword) ||
       phone.includes(keyword) ||
@@ -186,9 +269,13 @@ const AdminMechanicProfile = () => {
     );
 
     const matchesStatus = statusFilter === 'all' || (m.status && m.status.toLowerCase() === statusFilter.toLowerCase());
+    const matchesAvailability = availabilityFilter === 'all' || (availabilityFilter === 'available' ? availability.available : !availability.available);
 
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesAvailability;
   });
+
+  const availableCount = mechanics.filter((mechanic) => getMechanicAvailability(mechanic).available).length;
+  const busyCount = mechanics.length - availableCount;
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -216,7 +303,22 @@ const AdminMechanicProfile = () => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+            <div className="bg-white rounded-2xl border border-emerald-100 p-4 shadow-sm">
+              <p className="text-xs font-medium text-slate-500">Available mechanics</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">{availableCount}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-amber-100 p-4 shadow-sm">
+              <p className="text-xs font-medium text-slate-500">Busy mechanics</p>
+              <p className="text-2xl font-bold text-amber-600 mt-1">{busyCount}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+              <p className="text-xs font-medium text-slate-500">Total mechanics</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">{mechanics.length}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setViewMode('grid')}
@@ -232,13 +334,23 @@ const AdminMechanicProfile = () => {
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => exportMechanicsToCSV()}
                 className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
               >
                 Export CSV
               </button>
+
+              <select
+                value={availabilityFilter}
+                onChange={(e) => setAvailabilityFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Availability</option>
+                <option value="available">Available</option>
+                <option value="busy">Busy</option>
+              </select>
 
               <select
                 value={statusFilter}
@@ -257,30 +369,37 @@ const AdminMechanicProfile = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {loading ? (
                 [...Array(8)].map((_, i) => <MechanicSkeleton key={i} />)
-              ) : filteredMechanics.map((m) => (
-                <div key={m.id || m.email || m.mechanicId} className="group bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl transition-all duration-300 relative overflow-hidden">
-                  <div className={`absolute top-0 right-0 h-1.5 w-full ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
+              ) : filteredMechanics.map((m) => {
+                const availability = getMechanicAvailability(m);
+                return (
+                  <div key={m.id || m.email || m.mechanicId} className="group bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl transition-all duration-300 relative overflow-hidden">
+                    <div className={`absolute top-0 right-0 h-1.5 w-full ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
 
-                  <div className="flex flex-col items-center">
-                    <div className="relative mt-2">
-                      <img src={m.profilePhoto || 'https://via.placeholder.com/150'} className="w-20 h-20 rounded-full object-cover border-4 border-slate-50 shadow-sm" alt={m.name} />
-                      <span className={`absolute bottom-0 right-0 w-5 h-5 rounded-full border-2 border-white ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
-                    </div>
-                    <h3 className="mt-4 font-bold text-slate-800 text-lg line-clamp-1">{m.name}</h3>
-                    <div className="flex items-center text-slate-500 text-sm gap-1 mb-4">
-                      <MapPin size={14} /> {m.garage?.city || "Unknown"}
-                    </div>
-                    <p className="text-slate-400 text-xs mb-4">Mechanic ID: {m.mechanicId || m.kyc?.mechanicId || m.id || 'N/A'}</p>
+                    <div className="flex flex-col items-center">
+                      <div className="relative mt-2">
+                        <img src={m.profilePhoto || 'https://via.placeholder.com/150'} className="w-20 h-20 rounded-full object-cover border-4 border-slate-50 shadow-sm" alt={m.name} />
+                        <span className={`absolute bottom-0 right-0 w-5 h-5 rounded-full border-2 border-white ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
+                      </div>
+                      <h3 className="mt-4 font-bold text-slate-800 text-lg line-clamp-1">{m.name}</h3>
+                      <div className="flex items-center text-slate-500 text-sm gap-1 mb-2">
+                        <MapPin size={14} /> {m.garage?.city || "Unknown"}
+                      </div>
+                      <span className={`inline-flex items-center gap-1 mb-3 px-2.5 py-1 rounded-full text-xs font-semibold border ${availability.tone}`}>
+                        {availability.icon}
+                        {availability.label}
+                      </span>
+                      <p className="text-slate-400 text-xs mb-4">Mechanic ID: {m.mechanicId || m.kyc?.mechanicId || m.id || 'N/A'}</p>
 
-                    <button
-                      onClick={() => fetchSingleMechanic(m.id)}
-                      className="w-full py-2.5 px-4 bg-slate-900 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
-                    >
-                      View Details
-                    </button>
+                      <button
+                        onClick={() => fetchSingleMechanic(m.id)}
+                        className="w-full py-2.5 px-4 bg-slate-900 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                      >
+                        View Details
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="bg-white p-4 rounded-xl shadow-sm border">
@@ -298,27 +417,37 @@ const AdminMechanicProfile = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Email</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Phone</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Availability</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-100">
-                      {filteredMechanics.map((m) => (
-                        <tr key={m.id || m.email || m.mechanicId} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm text-gray-700">{m.mechanicId || m.kyc?.mechanicId || m.id || ''}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{m.name}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{m.email}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{m.phone}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{m.status}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">
-                            <button
-                              onClick={() => fetchSingleMechanic(m.id)}
-                              className="px-3 py-1 rounded-lg bg-slate-900 text-white text-sm"
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredMechanics.map((m) => {
+                        const availability = getMechanicAvailability(m);
+                        return (
+                          <tr key={m.id || m.email || m.mechanicId} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-700">{m.mechanicId || m.kyc?.mechanicId || m.id || ''}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">{m.name}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">{m.email}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">{m.phone}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">{m.status}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${availability.tone}`}>
+                                {availability.icon}
+                                {availability.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                              <button
+                                onClick={() => fetchSingleMechanic(m.id)}
+                                className="px-3 py-1 rounded-lg bg-slate-900 text-white text-sm"
+                              >
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -337,9 +466,13 @@ const AdminMechanicProfile = () => {
                     <div>
                       <h2 className="text-xl font-bold text-slate-800">{selectedMechanic.name}</h2>
                       <p className="text-sm text-slate-500 mt-1">Mechanic ID: {selectedMechanic.mechanicId || selectedMechanic.kyc?.mechanicId || selectedMechanic.id || 'N/A'}</p>
-                      <div className="flex gap-2 items-center mt-2">
+                      <div className="flex flex-wrap gap-2 items-center mt-2">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${selectedMechanic.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                           {selectedMechanic.status}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${getMechanicAvailability(selectedMechanic).available ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+                          {getMechanicAvailability(selectedMechanic).icon}
+                          {getMechanicAvailability(selectedMechanic).label}
                         </span>
                         <span className="text-slate-400 text-xs">• Joined {new Date(selectedMechanic.createdAt).toLocaleDateString()}</span>
                       </div>
