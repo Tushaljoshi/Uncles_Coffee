@@ -19,7 +19,7 @@ const VEHICLE_ORDER_GROUPS = [
 ];
 
 const SERVICE_ORDER_GROUPS = [
-  ["General service", "General Services", "General Servicing"],
+  ["General service", "General Services", "General Service", "General Servicing"],
   ["Engine oil"],
   ["Tyre & Wheel care"],
   ["Batteries"],
@@ -1710,7 +1710,7 @@ const CreateService = () => {
                   )}
 
                   <div>
-                    <label className="block text-sm font-medium mb-1">Upload Image</label>
+                    <label className="block text-sm font-medium mb-1">Upload Image (Size: 1080 x 340 px)</label>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
                         <span className="text-sm text-gray-600 font-medium">Upload Image</span>
@@ -1726,21 +1726,75 @@ const CreateService = () => {
                   </div>
                 </>
               ) : modalMode === "vehicle" ? (
-                <input
-                  type="text"
-                  placeholder="Vehicle Name"
-                  className="w-full border p-2 rounded-lg"
-                  value={categoryName}
-                  onChange={(e) => setCategoryName(e.target.value)}
-                />
+                <>
+                  <input
+                    type="text"
+                    placeholder="Vehicle Name"
+                    className="w-full border p-2 rounded-lg"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                  />
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Upload Icon/Image (Size: 36 x 36 px)</label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
+                        <span className="text-sm text-gray-600 font-medium">Upload Icon/Image</span>
+                        <input type="file" onChange={handleIconUpload} className="hidden" />
+                      </label>
+                      {iconPreview && (
+                        <div className="relative">
+                          <img src={iconPreview} alt="preview" className="w-14 h-14 rounded-xl border shadow-sm object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIconFile(null);
+                              setIconPreview(null);
+                            }}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow hover:bg-red-600"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
               ) : modalMode === "editVehicle" ? (
-                <input
-                  type="text"
-                  placeholder="Vehicle Name"
-                  className="w-full border p-2 rounded-lg"
-                  value={categoryName}
-                  onChange={(e) => setCategoryName(e.target.value)}
-                />
+                <>
+                  <input
+                    type="text"
+                    placeholder="Vehicle Name"
+                    className="w-full border p-2 rounded-lg"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                  />
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Upload Icon/Image (Size: 36 x 36 px)</label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
+                        <span className="text-sm text-gray-600 font-medium">Upload Icon/Image</span>
+                        <input type="file" onChange={handleIconUpload} className="hidden" />
+                      </label>
+                      {iconPreview && (
+                        <div className="relative">
+                          <img src={iconPreview} alt="preview" className="w-14 h-14 rounded-xl border shadow-sm object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIconFile(null);
+                              setIconPreview(null);
+                            }}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow hover:bg-red-600"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
               ) : modalMode === "editService" ? (
                 <input
                   type="text"
@@ -1769,6 +1823,42 @@ const CreateService = () => {
                       {categories.vehicle.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                     </select>
                   )}
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Service Name</label>
+                    <input
+                      type="text"
+                      placeholder="Service Name"
+                      className="w-full border p-2 rounded-lg"
+                      value={itemName}
+                      onChange={(e) => setItemName(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Upload Icon/Image (Size: 36 x 36 px)</label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
+                        <span className="text-sm text-gray-600 font-medium">Upload Icon/Image</span>
+                        <input type="file" onChange={handleIconUpload} className="hidden" />
+                      </label>
+                      {iconPreview && (
+                        <div className="relative">
+                          <img src={iconPreview} alt="preview" className="w-14 h-14 rounded-xl border shadow-sm object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIconFile(null);
+                              setIconPreview(null);
+                            }}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow hover:bg-red-600"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </>
               )}
               <button onClick={handleCreate} disabled={submitting} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 disabled:opacity-60">
