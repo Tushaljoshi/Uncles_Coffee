@@ -4,6 +4,30 @@ import Sidebar from "../components/Sidebar.jsx";
 import Toast from "../components/Toast.jsx";
 import { useToast } from "../hooks/useToast.js";
 
+const VEHICLE_ORDER_GROUPS = [
+  ["scooter"],
+  ["bike", "bicycle", "2-wheeler"],
+  ["car", "cars"],
+  ["3-wheeler", "three", "three-wheeler", "three wheeler"],
+  ["pickup", "van"],
+  ["tractor", "tractors"],
+  ["bus"],
+  ["truck"],
+];
+
+const getOrderIndex = (name = "") => {
+  const n = (name || "").toLowerCase();
+  for (let i = 0; i < VEHICLE_ORDER_GROUPS.length; i++) {
+    for (const kw of VEHICLE_ORDER_GROUPS[i]) {
+      if (n.includes(kw.toLowerCase())) return i;
+    }
+  }
+  return VEHICLE_ORDER_GROUPS.length;
+};
+
+const sortVehicles = (vehicles = []) =>
+  [...vehicles].sort((a, b) => getOrderIndex(a.name) - getOrderIndex(b.name));
+
 const EmergencyIssue = () => {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const toggleSidebar = () => setSidebarOpen((p) => !p);
@@ -41,8 +65,9 @@ const EmergencyIssue = () => {
         return;
       }
       const list = Array.isArray(data) ? data : data.data || [];
-      setVehicles(list);
-      setSelectedVehicleId((prev) => prev || (list[0]?.id ?? ""));
+      const sortedVehicles = sortVehicles(list);
+      setVehicles(sortedVehicles);
+      setSelectedVehicleId((prev) => prev || (sortedVehicles[0]?.id ?? ""));
     } catch {
       addToast("Failed to load vehicles", "error");
     }

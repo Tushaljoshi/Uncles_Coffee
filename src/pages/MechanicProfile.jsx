@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   X, Mail, Phone, Wrench, Car, FileText, Search,
   Users, Briefcase, MapPin, ShieldCheck,
@@ -20,6 +21,7 @@ const MechanicSkeleton = () => (
 );
 
 const AdminMechanicProfile = () => {
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [selectedMechanic, setSelectedMechanic] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
@@ -193,7 +195,7 @@ const AdminMechanicProfile = () => {
 
   const normalizeValue = (value) => String(value ?? "").toLowerCase().trim();
 
-  const getMechanicAvailability = (mechanic) => {
+  const getMechanicBookingContext = (mechanic) => {
     const relatedBookings = bookings.filter((booking) => {
       const bookingMechanic = booking.mechanic || {};
       const bookingValues = [
@@ -230,9 +232,20 @@ const AdminMechanicProfile = () => {
     });
 
     const availableStatuses = new Set(["complete", "completed", "work_done", "schedule", "scheduled", "declined", "cancelled", "rejected", "closed"]);
-    const isBusy = relatedBookings.some((booking) => !availableStatuses.has(normalizeValue(booking.status)));
+    const activeBookings = relatedBookings.filter((booking) => !availableStatuses.has(normalizeValue(booking.status)));
+    const isBusy = activeBookings.length > 0;
 
-    if (relatedBookings.length === 0) {
+    return {
+      relatedBookings,
+      activeBookings,
+      available: !isBusy,
+    };
+  };
+
+  const getMechanicAvailability = (mechanic) => {
+    const { activeBookings, available } = getMechanicBookingContext(mechanic);
+
+    if (activeBookings.length === 0) {
       return {
         label: "Available",
         tone: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -241,18 +254,18 @@ const AdminMechanicProfile = () => {
       };
     }
 
-    return isBusy
+    return available
       ? {
-          label: "Busy",
-          tone: "bg-amber-50 text-amber-700 border-amber-200",
-          available: false,
-          icon: <Clock3 size={14} />,
-        }
-      : {
           label: "Available",
           tone: "bg-emerald-50 text-emerald-700 border-emerald-200",
           available: true,
           icon: <CheckCircle2 size={14} />,
+        }
+      : {
+          label: "Busy",
+          tone: "bg-amber-50 text-amber-700 border-amber-200",
+          available: false,
+          icon: <Clock3 size={14} />,
         };
   };
 
@@ -371,6 +384,7 @@ const AdminMechanicProfile = () => {
                 [...Array(8)].map((_, i) => <MechanicSkeleton key={i} />)
               ) : filteredMechanics.map((m) => {
                 const availability = getMechanicAvailability(m);
+                const { activeBookings } = getMechanicBookingContext(m);
                 return (
                   <div key={m.id || m.email || m.mechanicId} className="group bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl transition-all duration-300 relative overflow-hidden">
                     <div className={`absolute top-0 right-0 h-1.5 w-full ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
@@ -389,6 +403,30 @@ const AdminMechanicProfile = () => {
                         {availability.label}
                       </span>
                       <p className="text-slate-400 text-xs mb-4">Mechanic ID: {m.mechanicId || m.kyc?.mechanicId || m.id || 'N/A'}</p>
+
+                      {/* {!availability.available && activeBookings.length > 0 && (
+                        <div className="w-full mb-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1.5">Active Ticket</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {activeBookings.map((booking) => {
+                              const bookingId = booking.bookingId || booking._id || booking.id;
+                              if (!bookingId) return null;
+                              return (
+                                <button
+                                  key={bookingId}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/service-tickets?bookingId=${encodeURIComponent(bookingId)}`);
+                                  }}
+                                  className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 underline decoration-amber-300 underline-offset-2"
+                                >
+                                  {bookingId}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )} */}
 
                       <button
                         onClick={() => fetchSingleMechanic(m.id)}
@@ -424,6 +462,7 @@ const AdminMechanicProfile = () => {
                     <tbody className="bg-white divide-y divide-gray-100">
                       {filteredMechanics.map((m) => {
                         const availability = getMechanicAvailability(m);
+                        const { activeBookings } = getMechanicBookingContext(m);
                         return (
                           <tr key={m.id || m.email || m.mechanicId} className="hover:bg-gray-50">
                             <td className="px-4 py-3 text-sm text-gray-700">{m.mechanicId || m.kyc?.mechanicId || m.id || ''}</td>
@@ -432,10 +471,29 @@ const AdminMechanicProfile = () => {
                             <td className="px-4 py-3 text-sm text-gray-700">{m.phone}</td>
                             <td className="px-4 py-3 text-sm text-gray-700">{m.status}</td>
                             <td className="px-4 py-3 text-sm text-gray-700">
-                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${availability.tone}`}>
-                                {availability.icon}
-                                {availability.label}
-                              </span>
+                              <div className="space-y-2">
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${availability.tone}`}>
+                                  {availability.icon}
+                                  {availability.label}
+                                </span>
+                                {/* {!availability.available && activeBookings.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {activeBookings.map((booking) => {
+                                      const bookingId = booking.bookingId || booking._id || booking.id;
+                                      if (!bookingId) return null;
+                                      return (
+                                        <button
+                                          key={bookingId}
+                                          onClick={() => navigate(`/service-tickets?bookingId=${encodeURIComponent(bookingId)}`)}
+                                          className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 underline decoration-amber-300 underline-offset-2"
+                                        >
+                                          {bookingId}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )} */}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-700">
                               <button
@@ -499,6 +557,32 @@ const AdminMechanicProfile = () => {
 
                 {/* Modal Body */}
                 <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-white">
+                  {(() => {
+                    const { activeBookings } = getMechanicBookingContext(selectedMechanic);
+                    return !getMechanicAvailability(selectedMechanic).available && activeBookings.length > 0 ? (
+                      <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Clock3 size={16} className="text-amber-600" />
+                          <h3 className="text-sm font-semibold text-amber-800">Active Service Tickets</h3>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {activeBookings.map((booking) => {
+                            const bookingId = booking.bookingId || booking._id || booking.id;
+                            if (!bookingId) return null;
+                            return (
+                              <button
+                                key={bookingId}
+                                onClick={() => navigate(`/service-tickets?bookingId=${encodeURIComponent(bookingId)}`)}
+                                className="inline-flex items-center rounded-full border border-amber-200 bg-white px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+                              >
+                                {bookingId}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
                   {activeTab === 'overview' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       <div className="space-y-6">
