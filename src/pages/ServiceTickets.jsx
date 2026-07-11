@@ -30,6 +30,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Status" },
+  { value: "paid", label: "Paid" },
+  { value: "unpaid", label: "Unpaid" },
   { value: "searching", label: "Searching" },
   { value: "declined", label: "Declined" },
   { value: "assigned", label: "Assigned" },
@@ -92,6 +94,42 @@ const formatCurrency = (amount) => {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(n);
+};
+
+const renderServiceTypePrice = (serviceType) => {
+  const hasPrice = serviceType?.price != null && serviceType?.price !== "";
+  const hasDiscountPrice = serviceType?.discountPrice != null && serviceType?.discountPrice !== "";
+
+  const priceValue = hasPrice ? Number(serviceType.price) : null;
+  const discountValue = hasDiscountPrice ? Number(serviceType.discountPrice) : null;
+
+  const showPrice = hasPrice && !Number.isNaN(priceValue);
+  const showDiscount = hasDiscountPrice && !Number.isNaN(discountValue);
+
+  if (!showPrice && !showDiscount) return null;
+
+  if (showPrice && showDiscount) {
+    return (
+      <div className="flex flex-col items-end gap-0.5 flex-shrink-0 whitespace-nowrap">
+        <span className="text-xs sm:text-sm font-bold text-red-600">{formatCurrency(discountValue)}</span>
+        <span className="text-[10px] sm:text-[11px] font-medium text-gray-400 line-through">{formatCurrency(priceValue)}</span>
+      </div>
+    );
+  }
+
+  if (showDiscount) {
+    return (
+      <span className="text-xs sm:text-sm font-bold text-red-600 flex-shrink-0 whitespace-nowrap">
+        {formatCurrency(discountValue)}
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-xs sm:text-sm font-bold text-red-600 flex-shrink-0 whitespace-nowrap">
+      {formatCurrency(priceValue)}
+    </span>
+  );
 };
 
 const formatPhone = (phone) => {
@@ -249,11 +287,12 @@ const getStatusStyle = (status) => {
   return map[status] || "bg-gray-100 text-gray-600";
 };
 
+const COMPLETED_STATUSES = new Set(["complete", "completed", "work_done", "done"]);
+
 const getServiceStatusDisplay = (booking) => {
   const normalizedStatus = String(booking?.status || "").toLowerCase();
-  const completedStatuses = new Set(["complete", "completed", "work_done", "done"]);
 
-  if (completedStatuses.has(normalizedStatus)) {
+  if (COMPLETED_STATUSES.has(normalizedStatus)) {
     const paymentStatus = String(booking?.payment?.status || booking?.payment?.paymentStatus || "").toLowerCase();
     if (paymentStatus === "paid") {
       return {
@@ -315,7 +354,13 @@ const getEstimatedCost = (booking) => {
     return formatCurrency(booking.jobSheet.estimatedCost);
   }
   const types = (booking.serviceDetails || []).flatMap((s) => s.types || []);
-  const total = types.reduce((sum, t) => sum + (Number(t.price) || 0), 0);
+  const total = types.reduce((sum, t) => {
+    const hasDiscount = t?.discountPrice != null && t?.discountPrice !== "";
+    const raw = hasDiscount ? t.discountPrice : t.price;
+    const value = Number(raw);
+    return sum + (Number.isNaN(value) ? 0 : value);
+  }, 0);
+
   return total > 0 ? formatCurrency(total) : EMPTY;
 };
 
@@ -585,11 +630,7 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
                                 </p>
                               )}
                             </div>
-                            {t.price != null && (
-                              <span className="text-xs sm:text-sm font-bold text-red-600 flex-shrink-0 whitespace-nowrap">
-                                {formatCurrency(t.price)}
-                              </span>
-                            )}
+                            {renderServiceTypePrice(t)}
                           </li>
                         ))}
                       </ul>
@@ -986,7 +1027,19 @@ const ServiceTickets = () => {
   const filteredBookings = useMemo(() => {
     const keyword = search.toLowerCase().trim();
     return bookings.filter((b) => {
-      const matchStatus = statusFilter === "all" || b.status === statusFilter;
+      const normalizedStatus = String(b.status || "").toLowerCase();
+      const paymentStatus = String(b.payment?.status || b.payment?.paymentStatus || "").toLowerCase();
+      const isCompleted = COMPLETED_STATUSES.has(normalizedStatus);
+      let matchStatus = false;
+      if (statusFilter === "all") {
+        matchStatus = true;
+      } else if (statusFilter === "paid") {
+        matchStatus = isCompleted && paymentStatus === "paid";
+      } else if (statusFilter === "unpaid") {
+        matchStatus = isCompleted && paymentStatus !== "paid";
+      } else {
+        matchStatus = b.status === statusFilter;
+      }
       const matchType = typeFilter === "all" || b.bookingType === typeFilter;
 
       if (!keyword) return matchStatus && matchType;
@@ -1020,10 +1073,21 @@ const ServiceTickets = () => {
   }, [bookings, search, statusFilter, typeFilter]);
 
   const statusCounts = useMemo(() => {
-    const counts = { all: bookings.length };
+    const counts = { all: bookings.length, paid: 0, unpaid: 0 };
     bookings.forEach((b) => {
       const s = b.status || "unknown";
       counts[s] = (counts[s] || 0) + 1;
+
+      const normalizedStatus = String(b.status || "").toLowerCase();
+      const isCompleted = COMPLETED_STATUSES.has(normalizedStatus);
+      if (isCompleted) {
+        const paymentStatus = String(b.payment?.status || b.payment?.paymentStatus || "").toLowerCase();
+        if (paymentStatus === "paid") {
+          counts.paid += 1;
+        } else {
+          counts.unpaid += 1;
+        }
+      }
     });
     return counts;
   }, [bookings]);
