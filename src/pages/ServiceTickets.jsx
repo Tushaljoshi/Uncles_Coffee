@@ -349,6 +349,17 @@ const getServiceNames = (booking) => {
   return names.length ? names.join(", ") : EMPTY;
 };
 
+const getServiceDisplay = (booking) => {
+  const names = getServiceNames(booking);
+  if (names !== EMPTY) return names;
+  const issue = booking.issueType || booking.issueDetails?.issueType;
+  if (!hasValue(issue)) return EMPTY;
+  const parts = [formatStatus(issue)];
+  if (booking.price != null && booking.price !== "") parts.push(formatCurrency(booking.price));
+  if (booking.visitCost != null && booking.visitCost !== "") parts.push(`Visit: ${formatCurrency(booking.visitCost)}`);
+  return parts.join(" — ");
+};
+
 const getEstimatedCost = (booking) => {
   if (booking.jobSheet?.estimatedCost != null) {
     return formatCurrency(booking.jobSheet.estimatedCost);
@@ -479,7 +490,7 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
   const notesText = cleanMultiline(booking.notes || booking.note);
   const equipmentNames = uniqueNames(booking.equipmentDetails);
   const hasJobSheet = jobSheet.estimatedCost != null || hasValue(jobSheet.description);
-  const hasPayment = payment.amount != null || hasValue(payment.orderId);
+  const hasPayment = payment.amount != null || hasValue(payment.orderId || payment.method);
   const paymentStatusStyle = (s) =>
     s === "paid"
       ? "bg-green-100 text-green-800"
@@ -599,11 +610,24 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
 
           <SectionCard title="Services & Equipment" icon={ClipboardList}>
             {(booking.serviceDetails || []).length === 0 ? (
-              <p className="text-sm text-gray-400 italic">
-                {booking.issueType
-                  ? `Emergency issue: ${formatStatus(booking.issueType)}`
-                  : "No service details available"}
-              </p>
+              hasValue(booking.issueType || booking.issueDetails?.issueType) ? (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-gray-100 p-3 bg-white">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] sm:text-sm font-bold text-gray-800 truncate">{formatStatus(booking.issueType || booking.issueDetails?.issueType)}</p>
+                        <p className="text-[9px] text-gray-500 mt-1">Emergency issue</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-red-600">{booking.price != null && booking.price !== "" ? formatCurrency(booking.price) : EMPTY}</p>
+                        <p className="text-[11px] text-gray-500 mt-1">Visit: {booking.visitCost != null && booking.visitCost !== "" ? formatCurrency(booking.visitCost) : EMPTY}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 italic">No service details available</p>
+              )
             ) : (
               <div className="space-y-3">
                 {booking.serviceDetails.map((svc) => (
@@ -788,8 +812,22 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
               </div>
               <InfoGrid
                 items={[
-                  { label: "Order ID", value: displayText(payment.orderId), mono: true, fullWidth: true },
-                  { label: "Payment ID", value: displayText(payment.paymentId), mono: true, fullWidth: true },
+                  { label: "Payment Method", value: displayText(payment.method), mono: true, fullWidth: true },
+                  
+                  {
+                    label: "Order ID",
+                    value: displayText(payment.orderId),
+                    mono: true,
+                    fullWidth: true,
+                    show: String(payment.method || "").toLowerCase() !== "cash",
+                  },
+                  {
+                    label: "Payment ID",
+                    value: displayText(payment.paymentId),
+                    mono: true,
+                    fullWidth: true,
+                    show: String(payment.method || "").toLowerCase() !== "cash",
+                  },
                   { label: "Service Cost", value: formatCurrency(payment.serviceCost) },
                   { label: "Parts Cost", value: formatCurrency(payment.partsCost) },
                   { label: "Labour Charge", value: formatCurrency(payment.labourCharge) },
@@ -896,7 +934,7 @@ const ExportModal = ({ allCount, onClose, onExport }) => {
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-3">
             <FileText size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-slate-600 leading-relaxed">
-              Will export <span className="font-bold text-slate-800">{allCount} ticket{allCount !== 1 ? "s" : ""}</span> with <span className="font-bold text-slate-800">16 columns</span> (including mechanic live location) into <span className="font-mono text-green-700 font-bold">{fileName || "export"}.xlsx</span>.
+              Will export <span className="font-bold text-slate-800">{allCount} ticket{allCount !== 1 ? "s" : ""}</span> with <span className="font-bold text-slate-800">18 columns</span> (including mechanic live location, service price & visit cost) into <span className="font-mono text-green-700 font-bold">{fileName || "export"}.xlsx</span>.
             </p>
           </div>
         </div>
@@ -933,6 +971,8 @@ const buildAndExport = (bookingsToExport, { fileName, sheetName }) => {
       "Vehicle": `${vehicle.brand || ""} ${vehicle.model || vehicle.vehicleName || ""}`.trim() || EMPTY,
       "Registration Number": displayText(vehicle.registrationNumber),
       "Services": getServiceNames(b),
+      "Service Price": b.price != null && b.price !== "" ? formatCurrency(b.price) : EMPTY,
+      "Visit Cost": b.visitCost != null && b.visitCost !== "" ? formatCurrency(b.visitCost) : EMPTY,
       "Estimated Cost": getEstimatedCost(b),
       "Service Address": displayText(location.address),
       "Mechanic Live Coordinates": mechanicLocation.latitude && mechanicLocation.longitude 
@@ -949,7 +989,7 @@ const buildAndExport = (bookingsToExport, { fileName, sheetName }) => {
     { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 },
     { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
     { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 40 },
-    { wch: 18 }, { wch: 30 }, { wch: 12 }, { wch: 14 },
+    { wch: 18 }, { wch: 30 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
   ];
   ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft" };
   const range = XLSX.utils.decode_range(ws["!ref"]);
@@ -1267,7 +1307,7 @@ const ServiceTickets = () => {
                             <p className="text-[9px] sm:text-xs text-gray-500 truncate">{vehicle.registrationNumber || EMPTY}</p>
                           </td>
                           <td className="p-2 sm:p-3 hidden lg:table-cell min-w-0">
-                            <p className="text-[9px] sm:text-xs text-gray-600 line-clamp-2 max-w-[200px]">{getServiceNames(b)}</p>
+                            <p className="text-[9px] sm:text-xs text-gray-600 line-clamp-2 max-w-[200px]">{getServiceDisplay(b)}</p>
                           </td>
                           <td className="p-2 sm:p-3 text-center">
                             <span

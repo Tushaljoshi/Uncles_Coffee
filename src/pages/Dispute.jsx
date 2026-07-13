@@ -686,14 +686,14 @@ const AdminDisputePage = () => {
                   <p className="text-sm font-medium mb-2">
                     Evidence ({selectedDispute.images.length})
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-wrap items-start gap-1">
                     {selectedDispute.images.map((url, i) => (
                       <a
                         key={i}
                         href={url}
                         target="_blank"
                         rel="noreferrer"
-                        className="aspect-square rounded-lg overflow-hidden border hover:ring-2 hover:ring-red-400"
+                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-md overflow-hidden border hover:ring-2 hover:ring-red-400"
                       >
                         <img
                           src={url}
