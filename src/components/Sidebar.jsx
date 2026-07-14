@@ -37,6 +37,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         { label: "Mechanic Services", icon: PackageOpenIcon, path: "/mechanicaservices" },
         { label: "Landing Bookings", icon: PackageOpenIcon, path: "/customer-booking" },
         { label: "Service Tickets", icon: Ticket, path: "/service-tickets" },
+        { label: "Assign Mechanic", icon: Wrench, path: "/admin-assign-mechanic" },
       ],
     },
     {

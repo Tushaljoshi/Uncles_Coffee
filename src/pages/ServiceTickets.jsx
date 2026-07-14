@@ -471,8 +471,16 @@ const StarRating = ({ rating }) => (
 const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
   if (!booking) return null;
 
+  const [mechanics, setMechanics] = useState([]);
+  const [selectedMechanicId, setSelectedMechanicId] = useState("");
+  const [assigningMechanic, setAssigningMechanic] = useState(false);
+  const [assignmentMessage, setAssignmentMessage] = useState("");
+  const [assignmentError, setAssignmentError] = useState("");
+  const [assignedMechanic, setAssignedMechanic] = useState(booking?.mechanic || null);
+  const [bookingStatus, setBookingStatus] = useState(booking?.status);
+
   const customer = booking.customer || {};
-  const mechanic = booking.mechanic || {};
+  const mechanic = assignedMechanic || booking.mechanic || {};
   const vehicle = booking.vehicle || {};
   const location = booking.location || {};
   const timeSlot = booking.timeSlot || {};
@@ -491,6 +499,7 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
   const equipmentNames = uniqueNames(booking.equipmentDetails);
   const hasJobSheet = jobSheet.estimatedCost != null || hasValue(jobSheet.description);
   const hasPayment = payment.amount != null || hasValue(payment.orderId || payment.method);
+  const showAssignMechanic = String(bookingStatus || "").toLowerCase() === "searching" && !assignedMechanic?.fullName && !assignedMechanic?.mechanicID && !assignedMechanic?.id && !booking?.mechanicId && !booking?.assignedMechanicId;
   const paymentStatusStyle = (s) =>
     s === "paid"
       ? "bg-green-100 text-green-800"
@@ -498,8 +507,76 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
         ? "bg-amber-100 text-amber-800"
         : "bg-gray-100 text-gray-600";
 
+  useEffect(() => {
+    setAssignedMechanic(booking?.mechanic || null);
+    setBookingStatus(booking?.status);
+    setAssignmentMessage("");
+    setAssignmentError("");
+    setSelectedMechanicId("");
+  }, [booking?.bookingId, booking?.status, booking?.mechanic]);
+
+  useEffect(() => {
+    if (!showAssignMechanic) {
+      setMechanics([]);
+      return;
+    }
+
+    const fetchMechanics = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/admin/mechanics`);
+        if (!res.ok) throw new Error(`API Error: ${res.status}`);
+        const data = await res.json();
+        const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+        setMechanics(list.filter(Boolean));
+      } catch (err) {
+        console.error("Failed to load mechanics", err);
+      }
+    };
+
+    fetchMechanics();
+  }, [showAssignMechanic]);
+
   const copyBookingId = () => {
     navigator.clipboard?.writeText(booking.bookingId);
+  };
+
+  const handleAssignMechanic = async () => {
+    if (!selectedMechanicId) return;
+
+    setAssigningMechanic(true);
+    setAssignmentError("");
+    setAssignmentMessage("");
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/servicebookings/${booking.bookingId}/assign-mechanic`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mechanicId: selectedMechanicId }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to assign mechanic");
+      }
+
+      const selected = mechanics.find(
+        (m) => String(m.userId || m.id || m._id || m.mechanicId || m.mechanicID || "") === String(selectedMechanicId)
+      );
+
+      setAssignedMechanic({
+        ...(selected || {}),
+        fullName: selected?.name || selected?.fullName || selected?.garage?.name || "Mechanic",
+        mechanicID: selected?.mechanicId || selected?.kyc?.mechanicId || selected?.mechanicID || selected?.id || selectedMechanicId,
+        id: selected?.id || selected?.userId || selected?.userID || selectedMechanicId,
+      });
+      setBookingStatus("assigned");
+      setAssignmentMessage(data.message || "Mechanic assigned successfully.");
+      setSelectedMechanicId("");
+    } catch (err) {
+      setAssignmentError(err.message || "Failed to assign mechanic");
+    } finally {
+      setAssigningMechanic(false);
+    }
   };
 
   return (
@@ -564,6 +641,52 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
         </div>
 
         <div className="overflow-y-auto p-3 sm:p-4 md:p-5 space-y-3 sm:space-y-4">
+          {showAssignMechanic && (
+            <SectionCard title="Assign Mechanic" icon={Wrench}>
+              <div className="space-y-3">
+                <p className="text-xs sm:text-sm text-gray-600">
+                  This booking is still in searching status. Select a mechanic to assign to this booking.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    value={selectedMechanicId}
+                    onChange={(e) => setSelectedMechanicId(e.target.value)}
+                    className="flex-1 min-w-0 px-3 py-2.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:ring-2 focus:ring-red-500 outline-none"
+                  >
+                    <option value="">Select mechanic</option>
+                    {mechanics.map((m) => {
+                      const mechanicValue = m.userId || m.id || m._id || m.mechanicId || m.mechanicID || "";
+                      const mechanicCode = m.mechanicId || m.kyc?.mechanicId || m.mechanicID || m.id || m.userId || "";
+                      const mechanicName = m.name || m.fullName || m.garage?.name || "Unnamed mechanic";
+                      if (!mechanicValue) return null;
+                      return (
+                        <option key={mechanicValue} value={mechanicValue}>
+                          {mechanicCode ? `${mechanicCode} - ${mechanicName}` : mechanicName}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAssignMechanic}
+                    disabled={assigningMechanic || !selectedMechanicId}
+                    className="px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {assigningMechanic ? "Assigning..." : "Assign Mechanic"}
+                  </button>
+                </div>
+                {assignmentError && <p className="text-sm text-red-600">{assignmentError}</p>}
+                {assignmentMessage && <p className="text-sm text-green-600">{assignmentMessage}</p>}
+              </div>
+            </SectionCard>
+          )}
+
+          {!showAssignMechanic && assignedMechanic?.fullName && (
+            <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700">
+              Assigned mechanic: {assignedMechanic.fullName || assignedMechanic.name}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <PersonCard
               title="Customer"

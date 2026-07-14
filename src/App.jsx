@@ -15,6 +15,7 @@ import AddReview from "./pages/AddReview";
 import CustomerBooking from "./pages/CustomerBooking";
 import JobPart from "./pages/JobPart";
 import ServiceTickets from "./pages/ServiceTickets";
+import AdminAssignMechanic from "./pages/AdminAssignMechanic";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
         <Route path="/add-review" element={<AddReview/>} />
         <Route path="/customer-booking" element={<CustomerBooking/>} />
         <Route path="/service-tickets" element={<ServiceTickets/>} />
+        <Route path="/admin-assign-mechanic" element={<AdminAssignMechanic/>} />
       </Routes>
     </Router>
   );
