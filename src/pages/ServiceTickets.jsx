@@ -499,7 +499,11 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
   const equipmentNames = uniqueNames(booking.equipmentDetails);
   const hasJobSheet = jobSheet.estimatedCost != null || hasValue(jobSheet.description);
   const hasPayment = payment.amount != null || hasValue(payment.orderId || payment.method);
-  const showAssignMechanic = String(bookingStatus || "").toLowerCase() === "searching" && !assignedMechanic?.fullName && !assignedMechanic?.mechanicID && !assignedMechanic?.id && !booking?.mechanicId && !booking?.assignedMechanicId;
+  const hasExistingMechanic = Boolean(
+    assignedMechanic?.fullName || assignedMechanic?.mechanicID || assignedMechanic?.id || booking?.mechanicId || booking?.assignedMechanicId
+  );
+  const isMechanicAccepted = String(booking?.acceptanceStatus || "").toLowerCase() === "accepted";
+  const showAssignMechanic = !isMechanicAccepted && (String(bookingStatus || "").toLowerCase() === "searching" || hasExistingMechanic);
   const paymentStatusStyle = (s) =>
     s === "paid"
       ? "bg-green-100 text-green-800"
@@ -541,6 +545,11 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
   };
 
   const handleAssignMechanic = async () => {
+    if (isMechanicAccepted) {
+      setAssignmentError("This mechanic has already accepted the assignment, so it cannot be reassigned.");
+      return;
+    }
+
     if (!selectedMechanicId) return;
 
     setAssigningMechanic(true);
@@ -570,7 +579,9 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
         id: selected?.id || selected?.userId || selected?.userID || selectedMechanicId,
       });
       setBookingStatus("assigned");
-      setAssignmentMessage(data.message || "Mechanic assigned successfully.");
+      setAssignmentMessage(
+        hasExistingMechanic ? (data.message || "Mechanic reassigned successfully.") : (data.message || "Mechanic assigned successfully.")
+      );
       setSelectedMechanicId("");
     } catch (err) {
       setAssignmentError(err.message || "Failed to assign mechanic");
@@ -645,7 +656,9 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
             <SectionCard title="Assign Mechanic" icon={Wrench}>
               <div className="space-y-3">
                 <p className="text-xs sm:text-sm text-gray-600">
-                  This booking is still in searching status. Select a mechanic to assign to this booking.
+                  {hasExistingMechanic
+                    ? "This booking already has a mechanic. You can select a different mechanic to reassign it."
+                    : "This booking is still in searching status. Select a mechanic to assign to this booking."}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <select
@@ -672,7 +685,7 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
                     disabled={assigningMechanic || !selectedMechanicId}
                     className="px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {assigningMechanic ? "Assigning..." : "Assign Mechanic"}
+                    {assigningMechanic ? (hasExistingMechanic ? "Reassigning..." : "Assigning...") : (hasExistingMechanic ? "Reassign Mechanic" : "Assign Mechanic")}
                   </button>
                 </div>
                 {assignmentError && <p className="text-sm text-red-600">{assignmentError}</p>}
@@ -681,7 +694,13 @@ const TicketDetailModal = ({ booking, onClose, onViewDispute }) => {
             </SectionCard>
           )}
 
-          {!showAssignMechanic && assignedMechanic?.fullName && (
+          {isMechanicAccepted && assignedMechanic?.fullName && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+              This assignment has already been accepted by the mechanic, so it cannot be reassigned.
+            </div>
+          )}
+
+          {!showAssignMechanic && !isMechanicAccepted && assignedMechanic?.fullName && (
             <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-sm text-green-700">
               Assigned mechanic: {assignedMechanic.fullName || assignedMechanic.name}
             </div>

@@ -20,6 +20,14 @@ const MechanicSkeleton = () => (
   </div>
 );
 
+const BOOKING_TIME_SLOT_OPTIONS = [
+  { value: "all", label: "All Time Slots" },
+  { value: "10-12", label: "10:00 AM to 12:00 PM" },
+  { value: "12-2", label: "12:00 PM to 02:00 PM" },
+  { value: "2-4", label: "02:00 PM to 04:00 PM" },
+  { value: "4-6", label: "04:00 PM to 06:00 PM" },
+];
+
 const AdminMechanicProfile = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
@@ -32,6 +40,7 @@ const AdminMechanicProfile = () => {
   const [viewMode, setViewMode] = useState("grid");
   const [statusFilter, setStatusFilter] = useState("all");
   const [availabilityFilter, setAvailabilityFilter] = useState("all");
+  const [bookingTimeSlotFilter, setBookingTimeSlotFilter] = useState("all");
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -195,7 +204,59 @@ const AdminMechanicProfile = () => {
 
   const normalizeValue = (value) => String(value ?? "").toLowerCase().trim();
 
-  const getMechanicBookingContext = (mechanic) => {
+  const parseTimeToMinutes = (value) => {
+    if (!value && value !== 0) return null;
+
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    const match = raw.match(/^(\d{1,2})(?::(\d{1,2}))?\s*(AM|PM)?$/i);
+    if (!match) return null;
+
+    let hours = Number(match[1]);
+    const minutes = Number(match[2] || 0);
+    const meridiem = (match[3] || "").toUpperCase();
+
+    if (meridiem === "AM" && hours === 12) hours = 0;
+    if (meridiem === "PM" && hours !== 12) hours += 12;
+
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return hours * 60 + minutes;
+  };
+
+  const getBookingTimeSlotBucket = (booking) => {
+    const slot = booking?.timeSlot || {};
+    const fromValue = slot?.from || slot?.start;
+    const toValue = slot?.to || slot?.end;
+
+    const from = parseTimeToMinutes(fromValue);
+    const to = parseTimeToMinutes(toValue);
+
+    if (from == null || to == null) return null;
+
+    const ranges = [
+      { value: "10-12", label: "10:00 AM to 12:00 PM", start: 10 * 60, end: 12 * 60 },
+      { value: "12-2", label: "12:00 PM to 02:00 PM", start: 12 * 60, end: 14 * 60 },
+      { value: "2-4", label: "02:00 PM to 04:00 PM", start: 14 * 60, end: 16 * 60 },
+      { value: "4-6", label: "04:00 PM to 06:00 PM", start: 16 * 60, end: 18 * 60 },
+    ];
+
+    return ranges.find((range) => from < range.end && to > range.start)?.value || null;
+  };
+
+  const getBookingTimeSlotLabel = (booking) => {
+    const bucket = getBookingTimeSlotBucket(booking);
+    if (!bucket) {
+      const slot = booking?.timeSlot || {};
+      const from = slot?.from || slot?.start;
+      const to = slot?.to || slot?.end;
+      return from && to ? `${from} - ${to}` : "Not available";
+    }
+
+    return BOOKING_TIME_SLOT_OPTIONS.find((option) => option.value === bucket)?.label || "Not available";
+  };
+
+  const getMechanicBookingContext = (mechanic, selectedTimeSlot = "all") => {
     const relatedBookings = bookings.filter((booking) => {
       const bookingMechanic = booking.mechanic || {};
       const bookingValues = [
@@ -232,7 +293,10 @@ const AdminMechanicProfile = () => {
     });
 
     const availableStatuses = new Set(["complete", "completed", "work_done", "schedule", "scheduled", "declined", "cancelled", "rejected", "closed"]);
-    const activeBookings = relatedBookings.filter((booking) => !availableStatuses.has(normalizeValue(booking.status)));
+    const activeBookings = relatedBookings.filter((booking) => {
+      const matchesSlot = selectedTimeSlot === "all" || getBookingTimeSlotBucket(booking) === selectedTimeSlot;
+      return matchesSlot && !availableStatuses.has(normalizeValue(booking.status));
+    });
     const isBusy = activeBookings.length > 0;
 
     return {
@@ -243,7 +307,7 @@ const AdminMechanicProfile = () => {
   };
 
   const getMechanicAvailability = (mechanic) => {
-    const { activeBookings, available } = getMechanicBookingContext(mechanic);
+    const { activeBookings, available } = getMechanicBookingContext(mechanic, bookingTimeSlotFilter);
 
     if (activeBookings.length === 0) {
       return {
@@ -275,6 +339,7 @@ const AdminMechanicProfile = () => {
     const name = (m.name || m.fullName || "").toString().toLowerCase();
     const phone = (m.phone || "").toString();
     const availability = getMechanicAvailability(m);
+    const { activeBookings } = getMechanicBookingContext(m, bookingTimeSlotFilter);
     const matchesSearch = (
       name.includes(keyword) ||
       phone.includes(keyword) ||
@@ -283,8 +348,9 @@ const AdminMechanicProfile = () => {
 
     const matchesStatus = statusFilter === 'all' || (m.status && m.status.toLowerCase() === statusFilter.toLowerCase());
     const matchesAvailability = availabilityFilter === 'all' || (availabilityFilter === 'available' ? availability.available : !availability.available);
+    const matchesTimeSlot = bookingTimeSlotFilter === 'all' || activeBookings.length > 0;
 
-    return matchesSearch && matchesStatus && matchesAvailability;
+    return matchesSearch && matchesStatus && matchesAvailability && matchesTimeSlot;
   });
 
   const availableCount = mechanics.filter((mechanic) => getMechanicAvailability(mechanic).available).length;
@@ -356,6 +422,18 @@ const AdminMechanicProfile = () => {
               </button>
 
               <select
+                value={bookingTimeSlotFilter}
+                onChange={(e) => setBookingTimeSlotFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500"
+              >
+                {BOOKING_TIME_SLOT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
                 value={availabilityFilter}
                 onChange={(e) => setAvailabilityFilter(e.target.value)}
                 className="px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500"
@@ -384,7 +462,7 @@ const AdminMechanicProfile = () => {
                 [...Array(8)].map((_, i) => <MechanicSkeleton key={i} />)
               ) : filteredMechanics.map((m) => {
                 const availability = getMechanicAvailability(m);
-                const { activeBookings } = getMechanicBookingContext(m);
+                const { activeBookings } = getMechanicBookingContext(m, bookingTimeSlotFilter);
                 return (
                   <div key={m.id || m.email || m.mechanicId} className="group bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl transition-all duration-300 relative overflow-hidden">
                     <div className={`absolute top-0 right-0 h-1.5 w-full ${m.status === 'suspended' ? 'bg-red-500' : m.status === 'approved' ? 'bg-green-500' : 'bg-amber-500'}`} />
@@ -404,10 +482,10 @@ const AdminMechanicProfile = () => {
                       </span>
                       <p className="text-slate-400 text-xs mb-4">Mechanic ID: {m.mechanicId || m.kyc?.mechanicId || m.id || 'N/A'}</p>
 
-                      {/* {!availability.available && activeBookings.length > 0 && (
+                      {activeBookings.length > 0 && (
                         <div className="w-full mb-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1.5">Active Ticket</p>
-                          <div className="flex flex-wrap gap-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1.5">Active Booking Slots</p>
+                          <div className="flex flex-col gap-1.5">
                             {activeBookings.map((booking) => {
                               const bookingId = booking.bookingId || booking._id || booking.id;
                               if (!bookingId) return null;
@@ -418,15 +496,16 @@ const AdminMechanicProfile = () => {
                                     e.stopPropagation();
                                     navigate(`/service-tickets?bookingId=${encodeURIComponent(bookingId)}`);
                                   }}
-                                  className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 underline decoration-amber-300 underline-offset-2"
+                                  className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-left"
                                 >
-                                  {bookingId}
+                                  <span className="text-[11px] font-semibold text-amber-700 truncate">{bookingId}</span>
+                                  <span className="text-[10px] font-medium text-slate-600 whitespace-nowrap">{getBookingTimeSlotLabel(booking)}</span>
                                 </button>
                               );
                             })}
                           </div>
                         </div>
-                      )} */}
+                      )}
 
                       <button
                         onClick={() => fetchSingleMechanic(m.id)}
@@ -462,7 +541,7 @@ const AdminMechanicProfile = () => {
                     <tbody className="bg-white divide-y divide-gray-100">
                       {filteredMechanics.map((m) => {
                         const availability = getMechanicAvailability(m);
-                        const { activeBookings } = getMechanicBookingContext(m);
+                        const { activeBookings } = getMechanicBookingContext(m, bookingTimeSlotFilter);
                         return (
                           <tr key={m.id || m.email || m.mechanicId} className="hover:bg-gray-50">
                             <td className="px-4 py-3 text-sm text-gray-700">{m.mechanicId || m.kyc?.mechanicId || m.id || ''}</td>
@@ -476,8 +555,8 @@ const AdminMechanicProfile = () => {
                                   {availability.icon}
                                   {availability.label}
                                 </span>
-                                {/* {!availability.available && activeBookings.length > 0 && (
-                                  <div className="flex flex-wrap gap-1.5">
+                                {activeBookings.length > 0 && (
+                                  <div className="flex flex-col gap-1.5">
                                     {activeBookings.map((booking) => {
                                       const bookingId = booking.bookingId || booking._id || booking.id;
                                       if (!bookingId) return null;
@@ -485,14 +564,15 @@ const AdminMechanicProfile = () => {
                                         <button
                                           key={bookingId}
                                           onClick={() => navigate(`/service-tickets?bookingId=${encodeURIComponent(bookingId)}`)}
-                                          className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 underline decoration-amber-300 underline-offset-2"
+                                          className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-left"
                                         >
-                                          {bookingId}
+                                          <div className="text-[11px] font-semibold text-amber-700">{bookingId}</div>
+                                          <div className="text-[10px] text-slate-600">{getBookingTimeSlotLabel(booking)}</div>
                                         </button>
                                       );
                                     })}
                                   </div>
-                                )} */}
+                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-700">
@@ -547,7 +627,7 @@ const AdminMechanicProfile = () => {
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
-                      className={`py-4 px-4 text-sm font-bold border-b-2 transition-all capitalize whitespace-nowrap ${activeTab === tab ? "border-blue-600 text-blue-600" : "border-transparent text-slate-400 hover:text-slate-600"
+                      className={`py-4 px-4 text-sm font-bold border-b-2 mb-8 transition-all capitalize whitespace-nowrap ${activeTab === tab ? "border-blue-600 text-blue-600" : "border-transparent text-slate-400 hover:text-slate-600"
                         }`}
                     >
                       {tab}
@@ -558,14 +638,14 @@ const AdminMechanicProfile = () => {
                 {/* Modal Body */}
                 <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-white">
                   {(() => {
-                    const { activeBookings } = getMechanicBookingContext(selectedMechanic);
+                    const { activeBookings } = getMechanicBookingContext(selectedMechanic, bookingTimeSlotFilter);
                     return !getMechanicAvailability(selectedMechanic).available && activeBookings.length > 0 ? (
                       <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                         <div className="flex items-center gap-2 mb-3">
                           <Clock3 size={16} className="text-amber-600" />
                           <h3 className="text-sm font-semibold text-amber-800">Active Service Tickets</h3>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-col gap-2">
                           {activeBookings.map((booking) => {
                             const bookingId = booking.bookingId || booking._id || booking.id;
                             if (!bookingId) return null;
@@ -573,9 +653,10 @@ const AdminMechanicProfile = () => {
                               <button
                                 key={bookingId}
                                 onClick={() => navigate(`/service-tickets?bookingId=${encodeURIComponent(bookingId)}`)}
-                                className="inline-flex items-center rounded-full border border-amber-200 bg-white px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+                                className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-left"
                               >
-                                {bookingId}
+                                <span className="text-sm font-semibold text-amber-700">{bookingId}</span>
+                                <span className="text-xs font-medium text-slate-600">{getBookingTimeSlotLabel(booking)}</span>
                               </button>
                             );
                           })}
