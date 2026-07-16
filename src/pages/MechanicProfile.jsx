@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   X, Mail, Phone, Wrench, Car, FileText, Search,
-  Users, Briefcase, MapPin, ShieldCheck,
+  Users, Briefcase, MapPin, ShieldCheck, Calendar,
   Landmark, Smartphone, CheckCircle2, Clock3
 } from "lucide-react";
 import TopBar from "../components/TopBar.jsx";
@@ -41,6 +41,8 @@ const AdminMechanicProfile = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [availabilityFilter, setAvailabilityFilter] = useState("all");
   const [bookingTimeSlotFilter, setBookingTimeSlotFilter] = useState("all");
+  const [bookingDateFrom, setBookingDateFrom] = useState("");
+  const [bookingDateTo, setBookingDateTo] = useState("");
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -67,7 +69,7 @@ const AdminMechanicProfile = () => {
 
   const fetchServiceBookings = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/servicebookings//all-Admin_bookings`);
+      const res = await fetch(`${API_BASE}/api/servicebookings/all-Admin_bookings`);
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         setBookings(data.data);
@@ -256,8 +258,57 @@ const AdminMechanicProfile = () => {
     return BOOKING_TIME_SLOT_OPTIONS.find((option) => option.value === bucket)?.label || "Not available";
   };
 
+  const getBookingDateValue = (booking) => {
+    const rawDate = booking?.bookingDate || booking?.serviceDate || booking?.date || booking?.createdAt;
+    if (!rawDate) return null;
+
+    if (typeof rawDate === "object") {
+      if (rawDate._seconds) return new Date(rawDate._seconds * 1000);
+      if (rawDate.seconds) return new Date(rawDate.seconds * 1000);
+      if (rawDate.toDate) return rawDate.toDate();
+    }
+
+    const parsed = new Date(rawDate);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const formatBookingDate = (booking) => {
+    const date = getBookingDateValue(booking);
+    return date ? date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "No date";
+  };
+
+  const sortBookingsByDateDesc = (bookingsList) => {
+    return [...bookingsList].sort((a, b) => {
+      const aDate = getBookingDateValue(a)?.getTime() || 0;
+      const bDate = getBookingDateValue(b)?.getTime() || 0;
+      return bDate - aDate;
+    });
+  };
+
+  const bookingMatchesDateFilters = (booking) => {
+    if (!bookingDateFrom && !bookingDateTo) return true;
+    const date = getBookingDateValue(booking);
+    if (!date) return false;
+
+    if (bookingDateFrom) {
+      const fromDate = new Date(bookingDateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      if (date < fromDate) return false;
+    }
+
+    if (bookingDateTo) {
+      const toDate = new Date(bookingDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      if (date > toDate) return false;
+    }
+
+    return true;
+  };
+
   const getMechanicBookingContext = (mechanic, selectedTimeSlot = "all") => {
     const relatedBookings = bookings.filter((booking) => {
+      if (!bookingMatchesDateFilters(booking)) return false;
+
       const bookingMechanic = booking.mechanic || {};
       const bookingValues = [
         bookingMechanic.id,
@@ -292,7 +343,7 @@ const AdminMechanicProfile = () => {
       return Boolean(bookingName && mechanicName && bookingName === mechanicName);
     });
 
-    const availableStatuses = new Set(["complete", "completed", "work_done", "schedule", "scheduled", "declined", "cancelled", "rejected", "closed"]);
+    const availableStatuses = new Set(["complete", "completed", "work_done", "declined", "cancelled", "rejected", "closed"]);
     const activeBookings = relatedBookings.filter((booking) => {
       const matchesSlot = selectedTimeSlot === "all" || getBookingTimeSlotBucket(booking) === selectedTimeSlot;
       return matchesSlot && !availableStatuses.has(normalizeValue(booking.status));
@@ -333,6 +384,9 @@ const AdminMechanicProfile = () => {
         };
   };
 
+  const isDateFilterActive = Boolean(bookingDateFrom || bookingDateTo);
+  const effectiveAvailabilityFilter = isDateFilterActive && availabilityFilter === 'all' ? 'busy' : availabilityFilter;
+
   const filteredMechanics = mechanics.filter((m) => {
     const mechanicId = (m.mechanicId || m.kyc?.mechanicId || m.id || "").toString().toLowerCase();
     const keyword = search.toLowerCase();
@@ -347,14 +401,14 @@ const AdminMechanicProfile = () => {
     );
 
     const matchesStatus = statusFilter === 'all' || (m.status && m.status.toLowerCase() === statusFilter.toLowerCase());
-    const matchesAvailability = availabilityFilter === 'all' || (availabilityFilter === 'available' ? availability.available : !availability.available);
+    const matchesAvailability = effectiveAvailabilityFilter === 'all' || (effectiveAvailabilityFilter === 'available' ? availability.available : !availability.available);
     const matchesTimeSlot = bookingTimeSlotFilter === 'all' || activeBookings.length > 0;
 
     return matchesSearch && matchesStatus && matchesAvailability && matchesTimeSlot;
   });
 
-  const availableCount = mechanics.filter((mechanic) => getMechanicAvailability(mechanic).available).length;
-  const busyCount = mechanics.length - availableCount;
+  const availableCount = filteredMechanics.filter((mechanic) => getMechanicAvailability(mechanic).available).length;
+  const busyCount = filteredMechanics.length - availableCount;
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -421,6 +475,30 @@ const AdminMechanicProfile = () => {
                 Export CSV
               </button>
 
+              <div className="flex flex-wrap gap-2 items-center">
+                <input
+                  type="date"
+                  value={bookingDateFrom}
+                  onChange={(e) => setBookingDateFrom(e.target.value)}
+                  className="px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="date"
+                  value={bookingDateTo}
+                  onChange={(e) => setBookingDateTo(e.target.value)}
+                  className="px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={() => {
+                    setBookingDateFrom("");
+                    setBookingDateTo("");
+                  }}
+                  className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
+                >
+                  Clear dates
+                </button>
+              </div>
+
               <select
                 value={bookingTimeSlotFilter}
                 onChange={(e) => setBookingTimeSlotFilter(e.target.value)}
@@ -486,7 +564,7 @@ const AdminMechanicProfile = () => {
                         <div className="w-full mb-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1.5">Active Booking Slots</p>
                           <div className="flex flex-col gap-1.5">
-                            {activeBookings.map((booking) => {
+                            {sortBookingsByDateDesc(activeBookings).slice(0, 2).map((booking) => {
                               const bookingId = booking.bookingId || booking._id || booking.id;
                               if (!bookingId) return null;
                               return (
@@ -496,10 +574,10 @@ const AdminMechanicProfile = () => {
                                     e.stopPropagation();
                                     navigate(`/service-tickets?bookingId=${encodeURIComponent(bookingId)}`);
                                   }}
-                                  className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-left"
+                                  className="flex flex-col items-start gap-1 rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-left"
                                 >
                                   <span className="text-[11px] font-semibold text-amber-700 truncate">{bookingId}</span>
-                                  <span className="text-[10px] font-medium text-slate-600 whitespace-nowrap">{getBookingTimeSlotLabel(booking)}</span>
+                                  <span className="text-[10px] text-slate-600">{formatBookingDate(booking)} · {getBookingTimeSlotLabel(booking)}</span>
                                 </button>
                               );
                             })}
@@ -567,7 +645,7 @@ const AdminMechanicProfile = () => {
                                           className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-left"
                                         >
                                           <div className="text-[11px] font-semibold text-amber-700">{bookingId}</div>
-                                          <div className="text-[10px] text-slate-600">{getBookingTimeSlotLabel(booking)}</div>
+                                          <div className="text-[10px] text-slate-600">{formatBookingDate(booking)} · {getBookingTimeSlotLabel(booking)}</div>
                                         </button>
                                       );
                                     })}
@@ -656,7 +734,7 @@ const AdminMechanicProfile = () => {
                                 className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-left"
                               >
                                 <span className="text-sm font-semibold text-amber-700">{bookingId}</span>
-                                <span className="text-xs font-medium text-slate-600">{getBookingTimeSlotLabel(booking)}</span>
+                                <span className="text-xs font-medium text-slate-600">{formatBookingDate(booking)} · {getBookingTimeSlotLabel(booking)}</span>
                               </button>
                             );
                           })}
