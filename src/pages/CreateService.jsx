@@ -442,6 +442,21 @@ const CreateService = () => {
     setEditingEngineCCId(null);
     setShowBrandModal(false);
   };
+  const selectAllModels = (brandId) => {
+    const models = modelsByBrand[brandId] || [];
+
+    setSelectedModelIdsByBrand((prev) => ({
+      ...prev,
+      [brandId]: new Set(models.map((m) => m.id)),
+    }));
+  };
+
+  const clearAllModels = (brandId) => {
+    setSelectedModelIdsByBrand((prev) => ({
+      ...prev,
+      [brandId]: new Set(),
+    }));
+  };
 
   const handleCreateBrand = async () => {
     if (!brandName?.trim()) return addToast("Brand name is required", "warning");
@@ -1104,38 +1119,75 @@ const CreateService = () => {
   };
 
   const openEditTypeModal = async (type, serviceId, categoryId) => {
-    resetModal();
-    setModalMode("editType");
-    setEditingTypeId(type.id);
-    setEditingTypeServiceId(serviceId);
-    setEditingTypeCategoryId(categoryId);
-    setSelectedCategoryId(categoryId);
-    setSelectedServiceId(serviceId);
-    setItemName(type.name || "");
-    setItemPrice(type.price || "");
-    setItemDiscountPrice(type.discountPrice ?? type.discount_price ?? 0);
-    setItemDesc(type.description || "");
-    setSubdescription(type.subdescription || "");
-    setEstimatedTime(type.estimatedTime || "");
-    setIconPreview(type.image || type.image_url || type.imageUrl || null);
+    try {
+      resetModal();
 
-    const mappings = Array.isArray(type.vehicleMappings) ? type.vehicleMappings : [];
-    const brandIds = [...new Set(mappings.map((m) => m.brandId).filter(Boolean))];
-    setSelectedBrandIds(brandIds);
-    const modelSelection = {};
-    mappings.forEach((m) => {
-      if (!m.brandId || !m.modelId) return;
-      modelSelection[m.brandId] = modelSelection[m.brandId] || new Set();
-      modelSelection[m.brandId].add(m.modelId);
-    });
-    setSelectedModelIdsByBrand(modelSelection);
+      // Fetch complete service type details
+      const res = await fetch(
+        `${API_BASE_URL}/api/admin/service-types/${type.id}`
+      );
 
-    if (categoryId && brandIds.length > 0) {
+      if (!res.ok) {
+        throw new Error("Failed to fetch service type");
+      }
+
+      const json = await res.json();
+
+      // Replace list data with full document
+      type = json.data;
+
+      setModalMode("editType");
+      setEditingTypeId(type.id);
+      setEditingTypeServiceId(serviceId);
+      setEditingTypeCategoryId(categoryId);
+
+      setSelectedCategoryId(categoryId);
+      setSelectedServiceId(type.serviceId);
+
+      setItemName(type.name || "");
+      setItemPrice(type.price || "");
+      setItemDiscountPrice(type.discountPrice || 0);
+      setItemDesc(type.description || "");
+      setSubdescription(type.subdescription || "");
+      setEstimatedTime(type.estimatedTime || "");
+      setIconPreview(type.imageUrl || null);
+
+      // Vehicle Mappings
+      const mappings = Array.isArray(type.vehicleMappings)
+        ? type.vehicleMappings
+        : [];
+
+      const brandIds = [...new Set(mappings.map((m) => m.brandId))];
+
+      setSelectedBrandIds(brandIds);
+
+      const modelSelection = {};
+
+      mappings.forEach((m) => {
+        if (!modelSelection[m.brandId]) {
+          modelSelection[m.brandId] = new Set();
+        }
+
+        modelSelection[m.brandId].add(m.modelId);
+      });
+
+      setSelectedModelIdsByBrand(modelSelection);
+
+      // Load brands
       await fetchBrands(categoryId);
-      await Promise.all(brandIds.map((brandId) => fetchModelsForType(categoryId, brandId)));
-    }
 
-    setShowModal(true);
+      // Load models of selected brands
+      await Promise.all(
+        brandIds.map((brandId) =>
+          fetchModelsForType(categoryId, brandId)
+        )
+      );
+
+      setShowModal(true);
+
+    } catch (err) {
+      addToast(err.message, "error");
+    }
   };
 
   const openEditEquipmentModal = (equipment) => {
@@ -1564,6 +1616,112 @@ const CreateService = () => {
                       onChange={(e) => setEstimatedTime(e.target.value)}
                     />
                   </div>
+                  <div className="mt-5">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      Select Brands & Models
+                    </label>
+
+                    <div className="border rounded-xl bg-gray-50 p-4 max-h-80 overflow-y-auto space-y-4">
+
+                      {brandsList.length === 0 && (
+                        <p className="text-sm text-gray-500">
+                          No brands available.
+                        </p>
+                      )}
+
+                      {brandsList.map((brand) => {
+                        const brandSelected = selectedBrandIds.includes(brand.id);
+                        return (
+                          <div
+                            key={brand.id}
+                            className={`border rounded-lg shadow-sm ${brandSelected ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}
+                          >
+                            {/* Brand Header */}
+                            <div className={`flex items-center px-4 py-3 border-b ${brandSelected ? 'bg-red-100' : 'bg-white'}`}>
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 accent-red-600"
+                                checked={brandSelected}
+                                onChange={() => toggleBrandSelection(brand.id)}
+                              />
+
+                              <span className={`ml-3 font-medium ${brandSelected ? 'text-red-700' : 'text-gray-800'}`}>
+                                {brand.name}
+                              </span>
+
+                              {brandSelected && (
+                                <span className="ml-auto inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                                  Selected
+                                </span>
+                              )}
+                            </div>
+
+                            {brandSelected && (
+                              <div className="p-4">
+
+                                <div className="flex justify-between items-center mb-3">
+                                  <span className="text-sm font-medium text-gray-600">
+                                    Models
+                                  </span>
+
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => selectAllModels(brand.id)}
+                                      className="text-xs font-semibold px-3 py-1 rounded bg-red-100 text-red-800 hover:bg-red-200"
+                                    >
+                                      Select All
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => clearAllModels(brand.id)}
+                                      className="text-xs font-semibold px-3 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                  {modelsByBrand[brand.id]?.length ? (
+                                    modelsByBrand[brand.id].map((model) => {
+                                      const modelSelected = selectedModelIdsByBrand[brand.id]?.has(model.id);
+                                      return (
+                                        <label
+                                          key={model.id}
+                                          className={`flex items-center gap-2 text-sm cursor-pointer rounded-lg border px-3 py-2 ${modelSelected ? 'bg-red-50 border-red-200 text-gray-700' : 'bg-white border-gray-200 text-gray-700'}`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            className="w-4 h-4 accent-red-600"
+                                            checked={modelSelected || false}
+                                            onChange={() =>
+                                              toggleModelSelection(brand.id, model.id)
+                                            }
+                                          />
+
+                                          {model.name}
+                                          {modelSelected && (
+                                            <span className="ml-auto text-xs font-semibold text-red-700">Selected</span>
+                                          )}
+                                        </label>
+                                      );
+                                    })
+                                  ) : (
+                                    <p className="text-sm text-gray-400 col-span-full">
+                                      No models available
+                                    </p>
+                                  )}
+                                </div>
+
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Upload Image</label>
                     <div className="flex items-center gap-4">
@@ -1619,8 +1777,8 @@ const CreateService = () => {
                     </select>
                   </div>
                   <div>
-                      <label className="block text-sm font-medium mb-1">Type Name</label>
-                      <input type="text" placeholder="Basic Service" className="w-full border p-2 rounded-lg" value={itemName} onChange={(e) => setItemName(e.target.value)} />
+                    <label className="block text-sm font-medium mb-1">Type Name</label>
+                    <input type="text" placeholder="Basic Service" className="w-full border p-2 rounded-lg" value={itemName} onChange={(e) => setItemName(e.target.value)} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">SubDescription (Optional)</label>

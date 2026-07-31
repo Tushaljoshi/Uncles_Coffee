@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Search,
@@ -27,6 +27,18 @@ import TopBar from "../components/TopBar.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+// Debounce hook for optimizing search performance
+const useDebounce = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+
+  return debouncedValue;
+};
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Status" },
@@ -1164,31 +1176,75 @@ const ServiceTickets = () => {
   const [typeFilter, setTypeFilter] = useState("all");
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const pageSize = 50;
+  const abortControllerRef = useRef(null);
+  const debouncedSearch = useDebounce(search, 300);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-  const fetchBookings = async () => {
-    try {
+  const fetchBookings = useCallback(async (pageNum = 1, resetData = true) => {
+    if (pageNum === 1) {
       setLoading(true);
       setError(null);
-      const res = await fetch(`${API_BASE_URL}/api/servicebookings//all-Admin_bookings`);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      abortControllerRef.current = new AbortController();
+    } else {
+      setLoadingMore(true);
+    }
+
+    try {
+      // Create URL with pagination parameters
+      const url = new URL(`${API_BASE_URL}/api/servicebookings/all-Admin_bookings`);
+      url.searchParams.append("page", pageNum);
+      url.searchParams.append("limit", pageSize);
+
+      const controller = abortControllerRef.current;
+      const res = await Promise.race([
+        fetch(url.toString(), { signal: controller?.signal }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Request timeout")), 15000)
+        ),
+      ]);
+
       if (!res.ok) throw new Error(`API Error: ${res.status}`);
       const data = await res.json();
+
       if (data.success && Array.isArray(data.data)) {
-        setBookings(data.data);
+        if (resetData) {
+          setBookings(data.data);
+          setPage(1);
+        } else {
+          setBookings((prev) => [...prev, ...data.data]);
+          setPage(pageNum);
+        }
+        setHasMore(data.data.length === pageSize);
       } else {
         throw new Error("Invalid API response format");
       }
     } catch (err) {
-      console.error(err);
-      setError(err.message || "Failed to load service tickets");
+      if (err.name !== "AbortError") {
+        console.error(err);
+        if (pageNum === 1) {
+          setError(err.message || "Failed to load service tickets");
+        }
+      }
     } finally {
-      setLoading(false);
+      if (pageNum === 1) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
-  };
+  }, [pageSize]);
 
   useEffect(() => {
-    fetchBookings();
+    fetchBookings(1, true);
+    return () => {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -1207,7 +1263,7 @@ const ServiceTickets = () => {
   }, [bookings, searchParams, setSearchParams]);
 
   const filteredBookings = useMemo(() => {
-    const keyword = search.toLowerCase().trim();
+    const keyword = debouncedSearch.toLowerCase().trim();
     return bookings.filter((b) => {
       const normalizedStatus = String(b.status || "").toLowerCase();
       const paymentStatus = String(b.payment?.status || b.payment?.paymentStatus || "").toLowerCase();
@@ -1252,7 +1308,7 @@ const ServiceTickets = () => {
 
       return matchStatus && matchType && haystack.includes(keyword);
     });
-  }, [bookings, search, statusFilter, typeFilter]);
+  }, [bookings, debouncedSearch, statusFilter, typeFilter]);
 
   const statusCounts = useMemo(() => {
     const counts = { all: bookings.length, paid: 0, unpaid: 0 };
@@ -1279,6 +1335,10 @@ const ServiceTickets = () => {
     setShowExportModal(false);
   };
 
+  const handleLoadMore = () => {
+    fetchBookings(page + 1, false);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
@@ -1296,7 +1356,7 @@ const ServiceTickets = () => {
             </div>
             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
               <button
-                onClick={fetchBookings}
+                onClick={() => fetchBookings(1, true)}
                 disabled={loading}
                 className="flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 disabled:opacity-60 touch-target whitespace-nowrap flex-shrink-0"
               >
@@ -1503,6 +1563,19 @@ const ServiceTickets = () => {
               </table>
             </div>
           </div>
+
+          {hasMore && filteredBookings.length > 0 && (
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="flex items-center justify-center gap-2 bg-red-600 text-white px-6 py-3 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60 touch-target"
+              >
+                <RefreshCw size={16} className={loadingMore ? "animate-spin" : ""} />
+                {loadingMore ? "Loading More..." : "Load More"}
+              </button>
+            </div>
+          )}
         </main>
       </div>
 

@@ -11,7 +11,7 @@ import {
   ScanEyeIcon,
   Wrench,
   Ticket,
-
+  Activity,
 } from "lucide-react";
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const navigate = useNavigate();
@@ -22,7 +22,9 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       section: "Main Menu",
       items: [
         { label: "Customer Profiles", icon: UserCircle, path: "/customer-profile" },
+        { label: "Customer Vehicles", icon: CarFrontIcon, path: "/customer-vehicles" },
         { label: "Mechanic Profiles", icon: UserCircle2Icon, path: "/mechanic-profile" },
+        { label: "Mechanic Status", icon: Activity, path: "/mechanic-status" },
       ],
     },
     {

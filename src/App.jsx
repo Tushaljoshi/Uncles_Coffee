@@ -16,6 +16,8 @@ import CustomerBooking from "./pages/CustomerBooking";
 import JobPart from "./pages/JobPart";
 import ServiceTickets from "./pages/ServiceTickets";
 import AdminAssignMechanic from "./pages/AdminAssignMechanic";
+import MechanicStatusTracking from "./pages/MechanicStatusTracking";
+import CustomerVehicles from "./pages/CustomerVehicles";
 
 function App() {
   return (
@@ -37,6 +39,8 @@ function App() {
         <Route path="/customer-booking" element={<CustomerBooking/>} />
         <Route path="/service-tickets" element={<ServiceTickets/>} />
         <Route path="/admin-assign-mechanic" element={<AdminAssignMechanic/>} />
+        <Route path="/mechanic-status" element={<MechanicStatusTracking/>} />
+        <Route path="/customer-vehicles" element={<CustomerVehicles/>} />
       </Routes>
     </Router>
   );

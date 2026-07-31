@@ -18,7 +18,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { auth } from "../firebase.js";
 import { signOut } from "firebase/auth";
 
-const TopBar = ({ toggleSidebar }) => {
+const TopBar = ({ toggleSidebar, sticky = true }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -39,6 +39,11 @@ const TopBar = ({ toggleSidebar }) => {
     "/mechanic-profile": {
       title: "Mechanic Profiles",
       subtitle: "View, verify, and manage registered mechanics and their details",
+    },
+
+    "/mechanic-status": {
+      title: "Mechanic Status Tracking",
+      subtitle: "Track mechanic online and offline status changes daily, weekly, and monthly",
     },
 
     "/mechanicaservices": {
@@ -100,7 +105,7 @@ const TopBar = ({ toggleSidebar }) => {
   };
 
   return (
-    <div className="w-full bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
+    <div className={`w-full bg-white border-b border-gray-200 shadow-sm ${sticky ? "sticky top-0 z-50" : ""}`}>
       <div className="flex items-center justify-between px-4 lg:px-6 py-3">
 
         {/* LEFT */}

@@ -258,6 +258,13 @@ const AdminMechanicProfile = () => {
     return BOOKING_TIME_SLOT_OPTIONS.find((option) => option.value === bucket)?.label || "Not available";
   };
 
+  const getActualBookingTime = (booking) => {
+    const slot = booking?.timeSlot || {};
+    const from = slot?.from || slot?.start;
+    const to = slot?.to || slot?.end;
+    return from && to ? `${from} - ${to}` : "Not available";
+  };
+
   const getBookingDateValue = (booking) => {
     const rawDate = booking?.bookingDate || booking?.serviceDate || booking?.date || booking?.createdAt;
     if (!rawDate) return null;
@@ -577,7 +584,7 @@ const AdminMechanicProfile = () => {
                                   className="flex flex-col items-start gap-1 rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-left"
                                 >
                                   <span className="text-[11px] font-semibold text-amber-700 truncate">{bookingId}</span>
-                                  <span className="text-[10px] text-slate-600">{formatBookingDate(booking)} · {getBookingTimeSlotLabel(booking)}</span>
+                                  <span className="text-[10px] text-slate-600">{formatBookingDate(booking)} · {getActualBookingTime(booking)}</span>
                                 </button>
                               );
                             })}
@@ -645,7 +652,7 @@ const AdminMechanicProfile = () => {
                                           className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-left"
                                         >
                                           <div className="text-[11px] font-semibold text-amber-700">{bookingId}</div>
-                                          <div className="text-[10px] text-slate-600">{formatBookingDate(booking)} · {getBookingTimeSlotLabel(booking)}</div>
+                                          <div className="text-[10px] text-slate-600">{formatBookingDate(booking)} · {getActualBookingTime(booking)}</div>
                                         </button>
                                       );
                                     })}
@@ -734,7 +741,7 @@ const AdminMechanicProfile = () => {
                                 className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-left"
                               >
                                 <span className="text-sm font-semibold text-amber-700">{bookingId}</span>
-                                <span className="text-xs font-medium text-slate-600">{formatBookingDate(booking)} · {getBookingTimeSlotLabel(booking)}</span>
+                                <span className="text-xs font-medium text-slate-600">{formatBookingDate(booking)} · {getActualBookingTime(booking)}</span>
                               </button>
                             );
                           })}
