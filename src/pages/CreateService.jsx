@@ -146,6 +146,7 @@ const CreateService = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadingVehicleIds, setLoadingVehicleIds] = useState(() => new Set());
+  const [statusUpdatingServiceId, setStatusUpdatingServiceId] = useState(null);
   const [error, setError] = useState(null);
   const fetchingVehicleIds = useRef(new Set());
   const loadedVehicleIdsRef = useRef(new Set());
@@ -222,6 +223,39 @@ const CreateService = () => {
     });
   }, []);
 
+  const handleServiceStatusToggle = useCallback(async (vehicleId, serviceId, isActive) => {
+    if (!vehicleId || !serviceId) return;
+
+    setStatusUpdatingServiceId(serviceId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/vehicles/${vehicleId}/services/${serviceId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to update service status");
+
+      addToast(data.message || (isActive ? "Service activated successfully" : "Service deactivated successfully"), "success");
+      setCategories((prev) => ({
+        ...prev,
+        vehicle: prev.vehicle.map((vehicle) =>
+          vehicle.id === vehicleId
+            ? {
+                ...vehicle,
+                items: vehicle.items.map((item) => (item.id === serviceId ? { ...item, isActive } : item)),
+              }
+            : vehicle
+        ),
+      }));
+    } catch (err) {
+      addToast(err.message || "Failed to update service status", "error");
+    } finally {
+      setStatusUpdatingServiceId(null);
+    }
+  }, [addToast]);
+
   const fetchVehicleDetails = useCallback(async (vehicleId, force = false) => {
     if (!vehicleId || fetchingVehicleIds.current.has(vehicleId)) return;
     if (!force && loadedVehicleIdsRef.current.has(vehicleId)) return;
@@ -285,7 +319,11 @@ const CreateService = () => {
             }
           }
           aggregatedTypes.push(...typeMap.values());
-          return { ...s, types: sortServiceTypes(aggregatedTypes) };
+          return {
+            ...s,
+            isActive: typeof s?.isActive === "boolean" ? s.isActive : typeof s?.active === "boolean" ? s.active : true,
+            types: sortServiceTypes(aggregatedTypes),
+          };
         })
       );
 
@@ -1415,6 +1453,24 @@ const CreateService = () => {
                                     <span className="flex-1 text-gray-700">{item.name}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
+                                    {activeTab === "vehicle" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleServiceStatusToggle(category.id, item.id, item.isActive === false)}
+                                        disabled={statusUpdatingServiceId === item.id}
+                                        className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
+                                          item.isActive === false
+                                            ? "border-gray-300 bg-gray-100 text-gray-600"
+                                            : "border-green-200 bg-green-50 text-green-700"
+                                        } ${statusUpdatingServiceId === item.id ? "opacity-60" : ""}`}
+                                      >
+                                        {statusUpdatingServiceId === item.id
+                                          ? "Updating..."
+                                          : item.isActive === false
+                                            ? "Inactive"
+                                            : "Active"}
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => activeTab === "equipment" ? openEditEquipmentModal(item) : openEditServiceModal(item, category.id)}
