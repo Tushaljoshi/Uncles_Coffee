@@ -1,48 +1,34 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import LoginForm from "./components/LoginForm";
-import MechanicServices from "./pages/MechanicServices";
-import AddBanner from "./pages/AddBanner";
-import EmergencyIssue from "./pages/EmergencyIssue";
-import Service from "./pages/CreateService";
-import Profile from "./pages/CustomerProfile"
-import MechanicProfile from "./pages/MechanicProfile"
-import HelpSupport from "./pages/Help&Support";
-import Dispute from "./pages/Dispute";
-import Plan from "./pages/CreatePlan"
-import CustomerAssets from "./pages/Customer_Assets";
-import AddReview from "./pages/AddReview";
-import CustomerBooking from "./pages/CustomerBooking";
-import JobPart from "./pages/JobPart";
-import ServiceTickets from "./pages/ServiceTickets";
-import AdminAssignMechanic from "./pages/AdminAssignMechanic";
-import MechanicStatusTracking from "./pages/MechanicStatusTracking";
-import CustomerVehicles from "./pages/CustomerVehicles";
-
+import { LanguageProvider } from "./context/LanguageContext";
+import Welcome from "./pages/Welcome";
+import Menu from "./pages/Menu";
+import Cart from "./pages/Cart";
+import OrderTracking from "./pages/OrderTracking";
+import MyOrders from "./pages/MyOrders";
+import Bookings from "./pages/Bookings";
+import TablesAvailability from "./pages/TablesAvailability"
+import BookingDetails from "./pages/BookingDetails";
+import BookingTracking from "./pages/BookingTracking";
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<LoginForm />} />
-        <Route path="/mechanicaservices" element={<MechanicServices />} />
-        <Route path="/add-banner" element={<AddBanner/>} />
-        <Route path="/visible-issues" element={<EmergencyIssue/>} />
-        <Route path="/service" element={<Service/>} />
-        <Route path="/customer-profile" element={<Profile/>} />
-        <Route path="/mechanic-profile" element={<MechanicProfile/>} />
-        <Route path="/help" element={<HelpSupport/>} />
-        <Route path="/dispute" element={<Dispute/>} />
-        <Route path="/plan" element={<Plan/>} />
-        <Route path="/job-part" element={<JobPart/>} />
-        <Route path="/assests" element={<CustomerAssets/>} />
-        <Route path="/add-review" element={<AddReview/>} />
-        <Route path="/customer-booking" element={<CustomerBooking/>} />
-        <Route path="/service-tickets" element={<ServiceTickets/>} />
-        <Route path="/admin-assign-mechanic" element={<AdminAssignMechanic/>} />
-        <Route path="/mechanic-status" element={<MechanicStatusTracking/>} />
-        <Route path="/customer-vehicles" element={<CustomerVehicles/>} />
-      </Routes>
-    </Router>
+    <LanguageProvider>
+      <Router>
+        <Routes>
+          {/* Customer */}
+          <Route path="/" element={<Welcome />} />
+          <Route path="/menu" element={<Menu />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/tracking" element={<OrderTracking />} />
+          <Route path="/myorders" element={<MyOrders />} />
+          <Route path="/bookings" element={<Bookings />} />
+          <Route path="/bookings/tables" element={<TablesAvailability />} />
+          <Route path="/bookings/details" element={<BookingDetails />} />
+          <Route path="/bookings/tracking" element={<BookingTracking />} />
+        </Routes>
+      </Router>
+    </LanguageProvider>
   );
 }
+
 export default App;
