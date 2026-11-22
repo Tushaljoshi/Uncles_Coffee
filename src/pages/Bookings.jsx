@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useLanguage } from "../context/LanguageContext";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "");
+
 const Booking = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -31,6 +33,60 @@ const Booking = () => {
       return null;
     }
   });
+  const [historyMobile, setHistoryMobile] = useState(
+    savedBooking?.customer?.mobile || ""
+  );
+  const [reservationHistory, setReservationHistory] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [didLookupHistory, setDidLookupHistory] = useState(false);
+
+  const handleLookupHistory = async (event) => {
+    event.preventDefault();
+    setHistoryError("");
+    setReservationHistory([]);
+    setDidLookupHistory(false);
+
+    const mobile = historyMobile.replace(/\D/g, "");
+    if (mobile.length < 10) {
+      setHistoryError("Enter a valid 10-digit mobile number.");
+      return;
+    }
+    if (!API_BASE_URL) {
+      setHistoryError("VITE_API_BASE_URL is not configured.");
+      return;
+    }
+
+    setIsLoadingHistory(true);
+    try {
+      const endpoint = new URL(`${API_BASE_URL}/api/reservations/history`);
+      endpoint.searchParams.set("mobile", mobile);
+      const response = await fetch(endpoint);
+      const result = await response.json();
+      if (
+        !response.ok ||
+        !result.success ||
+        !Array.isArray(result.reservations)
+      ) {
+        throw new Error(
+          result.message ||
+            `Reservation history request failed (${response.status}).`
+        );
+      }
+      setReservationHistory(result.reservations);
+      setDidLookupHistory(true);
+    } catch (requestError) {
+      setHistoryError(
+        requestError.message || "Unable to load reservation history."
+      );
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleOpenHistoryBooking = (reservation) => {
+    navigate("/bookings/tracking", { state: reservation });
+  };
 
   const formatDate = (value) => {
     if (!value) return "Select date";
@@ -268,6 +324,119 @@ const Booking = () => {
                   </button>
                 </div>
               )}
+
+              <form
+                onSubmit={handleLookupHistory}
+                className="mb-6 rounded-xl border border-[#E8DED0] bg-[#FAF7F1] p-4"
+              >
+                <label
+                  htmlFor="reservation-history-mobile"
+                  className="mb-2 block text-[10px] font-semibold text-espresso"
+                >
+                  Find reservations by mobile number
+                </label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    id="reservation-history-mobile"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    maxLength={10}
+                    value={historyMobile}
+                    onChange={(event) => {
+                      setHistoryMobile(
+                        event.target.value.replace(/\D/g, "").slice(0, 10)
+                      );
+                      setReservationHistory([]);
+                      setHistoryError("");
+                      setDidLookupHistory(false);
+                    }}
+                    placeholder="10-digit mobile number"
+                    className="h-11 min-w-0 flex-1 rounded-xl border border-[#E5D9CA] bg-white px-3 text-xs text-espresso outline-none focus:border-caramel focus:ring-2 focus:ring-caramel/10"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isLoadingHistory}
+                    className="h-11 shrink-0 rounded-full bg-caramel px-5 text-[10px] font-semibold text-cream transition hover:bg-caramelHover disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {isLoadingHistory ? "Searching..." : "Find Reservations"}
+                  </button>
+                </div>
+
+                {historyError && (
+                  <p role="alert" className="mt-3 text-[10px] text-red-700">
+                    {historyError}
+                  </p>
+                )}
+
+                {!isLoadingHistory &&
+                  !historyError &&
+                  reservationHistory.length === 0 && (
+                    <p className="mt-3 text-[9px] leading-4 text-[#806F61]">
+                      {didLookupHistory
+                        ? "No reservations found for this mobile number."
+                        : "Enter the mobile number used for a reservation to view its history."}
+                    </p>
+                  )}
+
+                {reservationHistory.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-caramel">
+                      {reservationHistory.length} reservation
+                      {reservationHistory.length === 1 ? "" : "s"} found
+                    </p>
+                    {reservationHistory.map((record, index) => {
+                      const reservation = record.reservation || {};
+                      const table =
+                        typeof reservation.tableId === "object"
+                          ? reservation.tableId
+                          : reservation.table || {};
+                      const date = reservation.date
+                        ? new Date(`${reservation.date}T00:00:00`).toLocaleDateString(
+                            "en-IN",
+                            { day: "numeric", month: "short", year: "numeric" }
+                          )
+                        : "Date unavailable";
+                      const time = reservation.time || "Time unavailable";
+                      const bookingId =
+                        record.bookingId || record.id || record._id;
+
+                      return (
+                        <div
+                          key={bookingId || `reservation-${index}`}
+                          className="flex flex-col gap-3 rounded-xl bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[10px] font-semibold text-espresso">
+                              {bookingId ? `#${bookingId}` : "Reservation"} ·{" "}
+                              {table.tableNumber
+                                ? `Table ${table.tableNumber}`
+                                : table.tableCode || table.name || "Table unavailable"}
+                            </p>
+                            <p className="mt-1 text-[9px] text-[#76665A]">
+                              {date} at {time} · {reservation.guests || "—"} guests
+                            </p>
+                            <p className="mt-1 text-[9px] text-[#76665A]">
+                              {record.status || "Status unavailable"} · Payment{" "}
+                              {record.paymentStatus || "pending"}
+                              {record.bookingFee != null
+                                ? ` · ₹${Number(record.bookingFee)}`
+                                : ""}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenHistoryBooking(record)}
+                            className="shrink-0 rounded-full border border-[#E5D9CA] px-4 py-2 text-[9px] font-semibold text-espresso transition hover:border-caramel hover:text-caramel"
+                          >
+                            View Details
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </form>
 
               {/* Card heading */}
 
