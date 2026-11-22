@@ -8,16 +8,17 @@ const Booking = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [date, setDate] = useState(
-    location.state?.date || "2026-09-12"
+    location.state?.date || getLocalDate()
   );
 
   const [guests, setGuests] = useState(
-    location.state?.guests || 2
+    Number(location.state?.guests) || 2
   );
 
   const [time, setTime] = useState(
-    location.state?.time || "19:30"
+    location.state?.time || ""
   );
+  const [formError, setFormError] = useState("");
 
   const [savedBooking] = useState(() => {
     try {
@@ -31,23 +32,13 @@ const Booking = () => {
     }
   });
 
-  const timeSlots = [
-    "06:00 PM",
-    "06:30 PM",
-    "07:00 PM",
-    "07:30 PM",
-    "08:00 PM",
-    "08:30 PM",
-    "09:00 PM",
-    "09:30 PM",
-  ];
-
   const formatDate = (value) => {
-    if (!value) return "";
+    if (!value) return "Select date";
 
     const selectedDate = new Date(
       `${value}T00:00:00`
     );
+    if (Number.isNaN(selectedDate.getTime())) return "Select date";
 
     return selectedDate.toLocaleDateString(
       "en-IN",
@@ -60,16 +51,32 @@ const Booking = () => {
   };
 
   const handleCheckAvailability = () => {
+    setFormError("");
+    if (!date || date < getLocalDate()) {
+      setFormError("Choose today or a future date.");
+      return;
+    }
+    if (!time) {
+      setFormError("Choose a preferred arrival time.");
+      return;
+    }
+    if (!Number.isInteger(Number(guests)) || Number(guests) < 1) {
+      setFormError("Enter at least one guest.");
+      return;
+    }
+
     navigate("/bookings/tables", {
       state: {
         date,
-        guests,
+        guests: Number(guests),
         time,
       },
     });
   };
 
-  const handleCheckExistingBooking = () => {
+  const 
+  
+  handleCheckExistingBooking = () => {
     navigate("/bookings/tracking", {
       state: savedBooking,
     });
@@ -212,7 +219,7 @@ const Booking = () => {
                   <InfoBlock
                     icon="⌂"
                     title="Choose Your Table"
-                    text="Select from our window, bar, booth and garden seating."
+                    text="Review table details and features from current availability."
                   />
 
                   <InfoBlock
@@ -398,8 +405,9 @@ const Booking = () => {
                   <input
                     id="booking-date"
                     type="date"
+                    required
                     value={date}
-                    min="2026-09-09"
+                    min={getLocalDate()}
                     onChange={(e) =>
                       setDate(e.target.value)
                     }
@@ -445,47 +453,40 @@ const Booking = () => {
                   {t.booking.guests}
                 </label>
 
-                <div
-                  className="
-                    grid
-                    grid-cols-5
-                    gap-2
-                  "
-                >
-
-                  {[1, 2, 3, 4, 5].map(
-                    (number) => {
-
-                      const active =
-                        guests === number;
-
-                      return (
-                        <button
-                          key={number}
-                          type="button"
-                          onClick={() =>
-                            setGuests(number)
-                          }
-                          className={`
-                            h-11
-                            rounded-xl
-                            text-[12px]
-                            font-medium
-                            transition-all
-                            ${active
-                              ? "bg-caramel text-cream shadow-sm"
-                              : "bg-[#F8F3EC] text-espresso hover:bg-latte"
-                            }
-                          `}
-                        >
-                          {number === 5
-                            ? "5+"
-                            : number}
-                        </button>
-                      );
-                    }
-                  )}
-
+                <div className="flex items-center justify-between rounded-xl border border-[#E5D9CA] bg-[#F8F3EC] p-2">
+                  <span className="px-2 text-xs text-[#806F61]">
+                    {guests} {guests === 1 ? "guest" : "guests"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="Remove one guest"
+                      disabled={guests <= 1}
+                      onClick={() => setGuests((current) => Math.max(1, Number(current) - 1))}
+                      className="h-9 w-9 rounded-lg bg-white text-lg text-espresso shadow-sm transition hover:bg-latte disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      −
+                    </button>
+                    <input
+                      aria-label="Number of guests"
+                      type="number"
+                      min="1"
+                      value={guests}
+                      onChange={(event) => {
+                        const next = Number(event.target.value);
+                        setGuests(Number.isFinite(next) && next >= 1 ? Math.floor(next) : 1);
+                      }}
+                      className="w-14 bg-transparent text-center text-sm font-semibold text-espresso outline-none"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Add one guest"
+                      onClick={() => setGuests((current) => Number(current) + 1)}
+                      className="h-9 w-9 rounded-lg bg-white text-lg text-espresso shadow-sm transition hover:bg-latte"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
 
                 <p className="mt-2 text-[10px] text-[#89786B]">
@@ -500,63 +501,20 @@ const Booking = () => {
 
               <div className="mb-6">
 
-                <div className="mb-2 flex items-center justify-between">
-
-                  <label
-                    className="
-                      text-[11px]
-                      font-semibold
-                      text-espresso
-                    "
-                  >
-                    {t.booking.preferredTime}
-                  </label>
-
-                  <span className="text-[9px] text-[#89786B]">
-                    {t.booking.dinner}
-                  </span>
-
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-
-                  {timeSlots.map((slot) => {
-
-                    const active =
-                      formatTimeForInput(slot) ===
-                      time;
-
-                    return (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() =>
-                          setTime(
-                            formatTimeForInput(
-                              slot
-                            )
-                          )
-                        }
-                        className={`
-                          rounded-xl
-                          border
-                          px-2
-                          py-2.5
-                          text-[10px]
-                          font-medium
-                          transition-all
-                          ${active
-                            ? "border-caramel bg-caramel text-cream"
-                            : "border-[#E5D9CA] bg-white text-espresso hover:border-caramel hover:bg-[#FAF3EA]"
-                          }
-                        `}
-                      >
-                        {slot.replace("PM", t.booking.periodPM)}
-                      </button>
-                    );
-                  })}
-
-                </div>
+                <label
+                  htmlFor="booking-time"
+                  className="mb-2 block text-[11px] font-semibold text-espresso"
+                >
+                  {t.booking.preferredTime}
+                </label>
+                <input
+                  id="booking-time"
+                  type="time"
+                  value={time}
+                  required
+                  onChange={(event) => setTime(event.target.value)}
+                  className="h-12 w-full rounded-xl border border-[#E5D9CA] bg-[#F8F3EC] px-4 text-[13px] font-medium text-espresso outline-none transition focus:border-caramel focus:ring-2 focus:ring-caramel/10"
+                />
 
               </div>
 
@@ -614,6 +572,12 @@ const Booking = () => {
               {/* =================================================
                   CTA
               ================================================= */}
+
+              {formError && (
+                <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
+                  {formError}
+                </p>
+              )}
 
               <button
                 type="button"
@@ -953,28 +917,16 @@ const StepCard = ({
    TIME HELPERS
 =========================================================== */
 
-const formatTimeForInput = (time) => {
-  const [value, period] = time.split(" ");
-
-  let [hours, minutes] =
-    value.split(":").map(Number);
-
-  if (period === "PM" && hours !== 12) {
-    hours += 12;
-  }
-
-  if (period === "AM" && hours === 12) {
-    hours = 0;
-  }
-
-  return `${String(hours).padStart(2, "0")}:${String(
-    minutes
-  ).padStart(2, "0")}`;
+const getLocalDate = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
-
 const formatTimeDisplay = (time) => {
-  if (!time) return "";
+  if (!time) return "Select time";
 
   let [hours, minutes] =
     time.split(":").map(Number);

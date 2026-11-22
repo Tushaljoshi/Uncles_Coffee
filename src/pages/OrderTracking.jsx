@@ -1,94 +1,123 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useLanguage } from "../context/LanguageContext";
+import {
+  getOrderRouteId,
+  readStoredValue,
+  requestJson,
+  writeStoredValue,
+} from "../services/orderApi";
 
 const Tracking = () => {
   const { t } = useLanguage();
+  const location = useLocation();
+  const storedOrder = readStoredValue("uncleCoffeeCurrentOrder", {});
+  const [orderData, setOrderData] = useState(storedOrder);
+  const [error, setError] = useState("");
+  const routeId =
+    location.state?.orderId ||
+    localStorage.getItem("uncleCoffeeOrderId") ||
+    getOrderRouteId(storedOrder);
+
+  useEffect(() => {
+    if (!routeId) {
+      setError("No order was found. Place an order to view live tracking.");
+      return undefined;
+    }
+
+    let active = true;
+    let timer;
+    const loadOrder = async () => {
+      try {
+        const result = await requestJson(
+          `/api/orders/${encodeURIComponent(routeId)}`
+        );
+        if (result.order && active) {
+          setOrderData(result.order);
+          writeStoredValue("uncleCoffeeCurrentOrder", result.order);
+          setError("");
+        }
+      } catch (requestError) {
+        if (active) setError(requestError.message || "Unable to load order status.");
+      } finally {
+        if (active) timer = window.setTimeout(loadOrder, 10000);
+      }
+    };
+
+    loadOrder();
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [routeId]);
+
+  const table = typeof orderData.tableId === "object" ? orderData.tableId : {};
   const order = {
-    id: "1042",
-    table: "12",
-    customer: "Tushal",
-    ticketId: "#1042",
-    status: "Preparing in Kitchen",
-    estimatedTime: "15–20 min",
-    readyTime: "06:00 PM",
-    placedTime: "05:42 PM",
-    acceptedTime: "05:43 PM",
-    preparingTime: "05:45 PM",
-    total: 777,
-    payment: "Paid",
-    paymentMethod: "UPI",
-    transactionId: "TXN88920",
-    kitchenNote: "Extra hot cappuccino, less sugar",
+    id: orderData.orderId || orderData._id || "—",
+    table: table.tableNumber || table.tableCode || orderData.tableId || "—",
+    customer: orderData.customer?.name || "Guest",
+    ticketId: orderData.orderId || orderData._id || "—",
+    status: orderData.status || "cart",
+    estimatedTime: ["ready", "served"].includes(orderData.status)
+      ? "Ready"
+      : orderData.status === "preparing"
+        ? "Preparing"
+        : "Awaiting kitchen",
+    readyTime: "Kitchen will update your order",
+    total: Number(orderData.total || 0),
+    payment: orderData.paymentStatus || "pending",
+    paymentMethod: orderData.paymentMethod || "counter",
+    transactionId: orderData.paymentId || "—",
+    kitchenNote: orderData.kitchenNote || "No kitchen note",
   };
-
-  const orderItems = [
-    {
-      id: 1,
-      quantity: 2,
-      name: "Cappuccino",
-      description: "Extra Hot • Colombian Roast",
-      price: 440,
-    },
-    {
-      id: 2,
-      quantity: 1,
-      name: "Veg Grilled Sandwich",
-      description: "Sourdough • Smoked Gouda",
-      price: 210,
-    },
-    {
-      id: 3,
-      quantity: 1,
-      name: "French Fries",
-      description: "Herbed Sea Salt & Garlic Aioli",
-      price: 127,
-    },
-  ];
-
-  const steps = [
-    {
-      number: 1,
-      title: t.tracking.orderReceived,
-      description:
-        "Sent through table terminal by Tushal",
-      time: order.placedTime,
-      status: "completed",
-    },
-    {
-      number: 2,
-      title: t.tracking.accepted,
-      description:
-        "Roastery kitchen verified tickets & milk specs",
-      time: order.acceptedTime,
-      status: "completed",
-    },
-    {
-      number: 3,
-      title: t.tracking.preparing,
-      description:
-        "Barista is steaming milk & crafting latte art; grill station is toasting your sourdough sandwiches.",
-      time: order.preparingTime,
-      status: "current",
-    },
-    {
-      number: 4,
-      title: t.tracking.ready,
-      description:
-        "Quality check at pass counter",
-      time: "approx 06:00 PM",
-      status: "upcoming",
-    },
-    {
-      number: 5,
-      title: t.tracking.served,
-      description:
-        "Runner brings warm ceramics directly to you",
-      time: "Upcoming",
-      status: "upcoming",
-    },
-  ];
+  const orderItems = (orderData.items || []).map((item, index) => {
+    const menuItem = typeof item.menuItemId === "object" ? item.menuItemId : {};
+    return {
+      id: menuItem._id || menuItem.id || item.menuItemId || index,
+      quantity: item.quantity,
+      name: item.name || menuItem.name || "Menu item",
+      description: [
+        item.options?.temperature,
+        item.options?.milk,
+        ...(item.options?.extras || []).map((extra) => extra.name),
+        item.note,
+      ].filter(Boolean).join(" · "),
+      price: Number(item.lineTotal || Number(item.unitPrice || 0) * item.quantity),
+    };
+  });
+  const statusSequence = orderData.status === "cancelled"
+    ? ["placed", "cancelled"]
+    : ["placed", "accepted", "preparing", "ready", "served"];
+  const statusLabels = {
+    placed: t.tracking.orderReceived,
+    accepted: t.tracking.accepted,
+    preparing: t.tracking.preparing,
+    ready: t.tracking.ready,
+    served: t.tracking.served,
+    cancelled: "Order cancelled",
+  };
+  const historyByStatus = new Map(
+    (orderData.statusHistory || []).map((entry) => [entry.status, entry])
+  );
+  const currentStep = statusSequence.indexOf(orderData.status);
+  const steps = statusSequence.map((status, index) => {
+    const history = historyByStatus.get(status);
+    const isComplete = currentStep >= 0 && index < currentStep;
+    return {
+      number: index + 1,
+      title: statusLabels[status],
+      description: history?.message || `Order ${status}.`,
+      time: history?.at
+        ? new Date(history.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "Upcoming",
+      status: index === currentStep
+        ? "current"
+        : isComplete || (status === "served" && orderData.status === "served")
+          ? "completed"
+          : "upcoming",
+    };
+  });
 
   return (
     <div className="min-h-screen bg-cream text-espresso">
@@ -105,6 +134,11 @@ const Tracking = () => {
 
       <main>
         <section className="mx-auto max-w-[1240px] px-4 pb-8 pt-5 sm:px-6 sm:pb-10 lg:px-8 lg:pb-28">
+          {error && (
+            <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </p>
+          )}
 
           {/* =================================================
               TOP BAR
@@ -127,7 +161,7 @@ const Tracking = () => {
               </span>
 
               <span className="font-semibold text-caramel">
-                Table 12 Active
+                Table {order.table} · {order.status}
               </span>
 
             </div>
@@ -186,7 +220,7 @@ const Tracking = () => {
                   </h1>
 
                   <p className="mt-1 text-sm text-[#624B3D] sm:text-base">
-                    The kitchen has accepted your order
+                    Your order is currently {order.status}
                     for{" "}
                     <span className="font-semibold text-espresso">
                       Table {order.table}.
@@ -363,7 +397,7 @@ const Tracking = () => {
                     </div>
 
                     <span className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[10px] font-semibold text-caramel">
-                      Paid • ₹{order.total}
+                      {order.payment === "paid" ? "Paid" : `Payment ${order.payment}`} • ₹{order.total}
                     </span>
 
                   </div>
@@ -468,13 +502,13 @@ const Tracking = () => {
                     className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-caramel text-sm font-semibold text-cream shadow-sm transition hover:bg-caramelHover"
                   >
                     <span>⊕</span>
-                    {t.tracking.addMore} to Table 12
+                    {t.tracking.addMore} to Table {order.table}
                   </Link>
 
                   {/* Orders */}
 
                   <Link
-                    to="/orders"
+                    to="/myorders"
                     className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#ECE7DF] text-sm font-semibold text-espresso transition hover:bg-latte"
                   >
                     ▤
@@ -490,7 +524,7 @@ const Tracking = () => {
                       className="flex items-center gap-2 text-xs font-medium text-caramel"
                     >
                       ♧
-                      Call Staff to Table 12
+                      Call Staff to Table {order.table}
                     </button>
 
                     <span className="text-[10px] text-[#C9B9AA]">
@@ -530,7 +564,7 @@ const Tracking = () => {
             </span>
 
             <span className="font-medium text-caramel">
-              Table 12 Active
+              Table {order.table} · {order.status}
             </span>
 
           </div>

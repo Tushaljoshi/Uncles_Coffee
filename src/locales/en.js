@@ -34,8 +34,8 @@ const en = {
     quickBooking: "Quick guest booking",
     liveStatus: "Live Status",
     trackBooking: "Track your booking",
-    flexible: "Flexible",
-    modifyWhenNeeded: "Modify when needed",
+    flexible: "Stay informed",
+    modifyWhenNeeded: "Track or cancel upcoming bookings",
     findTable: "Find your table",
     chooseDateTime: "No account required. Just choose your preferred date, time and party size.",
     date: "Date",
@@ -45,7 +45,7 @@ const en = {
     existingBooking: "Existing booking",
     checkBooking: "Check Booking",
     reservationReady: "Your reservation is ready to view",
-    groupHelp: "For groups larger than 5, we'll help find the best seating arrangement.",
+    groupHelp: "Choose your party size to find tables that fit your group.",
     periodPM: "PM",
     search: "Your Search",
     checkAvailability: "Check Availability",
@@ -123,7 +123,7 @@ const en = {
 
   bookingTracking: {
     pageTitle: "Track Your Reservation",
-    pageIntro: "Enter your Booking ID and mobile number to monitor your live table readiness in real time.",
+    pageIntro: "Use the mobile number from your reservation to view its latest status and booking history.",
     bookingId: "Booking ID",
     phone: "Phone",
     activeBooking: "Active Booking",

@@ -3,6 +3,56 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useLanguage } from "../context/LanguageContext";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "");
+
+const loadRazorpay = () =>
+  new Promise((resolve, reject) => {
+    if (window.Razorpay) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load Razorpay checkout."));
+    document.body.appendChild(script);
+  });
+
+const getBookingFromResponse = (result) =>
+  result.booking ||
+  result.reservation ||
+  result.data?.booking ||
+  result.data?.reservation ||
+  result.data ||
+  result;
+
+const mergeBooking = (record, fallback) => {
+  const reservation = record.reservation || {};
+  const table =
+    reservation.table ||
+    (typeof reservation.tableId === "object" ? reservation.tableId : null) ||
+    fallback.reservation?.table ||
+    {};
+
+  return {
+    ...fallback,
+    ...record,
+    bookingId: String(record.bookingId || fallback.bookingId || "").replace(/^#/, ""),
+    customer: record.customer || fallback.customer,
+    reservation: {
+      ...fallback.reservation,
+      ...reservation,
+      table: { ...fallback.reservation?.table, ...table },
+      bookingFee:
+        reservation.bookingFee ??
+        record.bookingFee ??
+        fallback.reservation?.bookingFee ??
+        fallback.bookingFee,
+    },
+  };
+};
+
 const BookingDetails = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -25,6 +75,7 @@ const BookingDetails = () => {
       area: "Window View",
       location: "Window Side",
       description: "Warm Sunlight Alcove",
+      bookingFee: 0,
       features: [
         "Natural Light",
         "Quiet Corner",
@@ -33,6 +84,7 @@ const BookingDetails = () => {
       amenities: ["Power Outlet"],
     },
   } = booking;
+  const bookingFee = Number(table.bookingFee || table.booking_fee || 0);
 
   // =========================================================
   // FORM STATE
@@ -43,9 +95,12 @@ const BookingDetails = () => {
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [agreed, setAgreed] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("online");
 
   const [error, setError] = useState("");
   const [confirmation, setConfirmation] = useState(null);
+  const [pendingBooking, setPendingBooking] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // =========================================================
   // DATE FORMAT
@@ -58,12 +113,102 @@ const BookingDetails = () => {
   // =========================================================
 
   const formattedTime = formatTime(time);
+  const isConfirmed =
+    String(confirmation?.status || "").toLowerCase() === "confirmed" ||
+    String(confirmation?.paymentStatus || "").toLowerCase() === "paid";
 
   // =========================================================
   // CONFIRM RESERVATION
   // =========================================================
 
-  const handleConfirmReservation = () => {
+  const saveBooking = (bookingRecord) => {
+    try {
+      localStorage.setItem("uncleCoffeeBooking", JSON.stringify(bookingRecord));
+    } catch {
+      setError("Reservation saved, but this browser could not store it locally.");
+    }
+  };
+
+  const startOnlinePayment = async (bookingRecord) => {
+    const bookingId = bookingRecord.bookingId;
+    const paymentOrderResponse = await fetch(
+      `${API_BASE_URL}/api/reservations/${encodeURIComponent(bookingId)}/create-payment`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: bookingFee,
+          notes: `Advance deposit for ${table.name || `Table ${table.tableNumber || table.id}`}`,
+        }),
+      }
+    );
+    const paymentOrder = await paymentOrderResponse.json();
+    if (!paymentOrderResponse.ok || paymentOrder.success === false) {
+      throw new Error(
+        paymentOrder.message ||
+          `Payment request failed (${paymentOrderResponse.status}).`
+      );
+    }
+    if (!paymentOrder.razorpayOrderId || !paymentOrder.keyId) {
+      throw new Error("The payment API returned incomplete Razorpay details.");
+    }
+
+    await loadRazorpay();
+    return new Promise((resolve, reject) => {
+      const razorpay = new window.Razorpay({
+        key: paymentOrder.keyId,
+        amount: paymentOrder.amount,
+        currency: paymentOrder.currency || "INR",
+        name: "Uncle's Coffee",
+        description: `Reservation ${bookingId}`,
+        order_id: paymentOrder.razorpayOrderId,
+        prefill: {
+          name: paymentOrder.customer?.name || name.trim(),
+          contact: paymentOrder.customer?.mobile || mobile.trim(),
+          email: email.trim(),
+        },
+        handler: async (razorpayResponse) => {
+          try {
+            const verifyResponse = await fetch(
+              `${API_BASE_URL}/api/reservations/${encodeURIComponent(bookingId)}/verify-payment`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  ...razorpayResponse,
+                  paymentId: paymentOrder.paymentId,
+                }),
+              }
+            );
+            const verification = await verifyResponse.json();
+            if (!verifyResponse.ok || verification.success === false) {
+              throw new Error(
+                verification.message ||
+                  `Payment verification failed (${verifyResponse.status}).`
+              );
+            }
+            resolve(mergeBooking(getBookingFromResponse(verification), bookingRecord));
+          } catch (verificationError) {
+            reject(verificationError);
+          }
+        },
+        modal: {
+          ondismiss: () => resolve(null),
+        },
+      });
+      razorpay.on("payment.failed", (paymentFailure) => {
+        reject(
+          new Error(
+            paymentFailure.error?.description ||
+              "Payment failed. Please try again."
+          )
+        );
+      });
+      razorpay.open();
+    });
+  };
+
+  const handleConfirmReservation = async () => {
     setError("");
 
     if (!name.trim()) {
@@ -88,34 +233,115 @@ const BookingDetails = () => {
       return;
     }
 
-    // Generate temporary booking ID.
-    // Later this should come from your backend/database.
-    const bookingId =
-      "#BK-" +
-      Math.floor(1000 + Math.random() * 9000);
+    if (!API_BASE_URL) {
+      setError("VITE_API_BASE_URL is not configured.");
+      return;
+    }
 
-    const confirmedBooking = {
-      bookingId,
-      customer: {
-        name: name.trim(),
-        mobile: mobile.trim(),
-        email: email.trim(),
-        notes: notes.trim(),
-      },
-      reservation: {
-        date,
-        guests,
-        time,
-        table,
-      },
+    setIsSubmitting(true);
+    const customer = {
+      name: name.trim(),
+      mobile: mobile.trim(),
+      email: email.trim(),
+      notes: notes.trim(),
     };
 
-    localStorage.setItem(
-      "uncleCoffeeBooking",
-      JSON.stringify(confirmedBooking)
-    );
+    try {
+      let bookingRecord = pendingBooking;
+      if (!bookingRecord) {
+        const response = await fetch(`${API_BASE_URL}/api/reservations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customer,
+            reservation: {
+              date,
+              time,
+              guests: Number(guests),
+              tableId: table.tableCode || table.code || table.id,
+            },
+            bookingFee,
+            requirePayment: bookingFee > 0,
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.success === false) {
+          throw new Error(
+            result.message || `Reservation request failed (${response.status}).`
+          );
+        }
 
-    setConfirmation(confirmedBooking);
+        const reservationRecord = getBookingFromResponse(result);
+        if (!reservationRecord.bookingId) {
+          throw new Error("The reservation API did not return a booking ID.");
+        }
+        bookingRecord = mergeBooking(
+          reservationRecord,
+          {
+            customer,
+            bookingFee,
+            reservation: {
+              date,
+              time,
+              guests: Number(guests),
+              bookingFee,
+              tableId: table.tableCode || table.code || table.id,
+              table: { ...table, bookingFee },
+            },
+          }
+        );
+        setPendingBooking(bookingRecord);
+        saveBooking(bookingRecord);
+
+        if (bookingFee <= 0 || result.paymentRequired === false) {
+          setConfirmation(bookingRecord);
+          return;
+        }
+      }
+
+      if (paymentMethod === "counter") {
+        const counterResponse = await fetch(
+          `${API_BASE_URL}/api/reservations/${encodeURIComponent(bookingRecord.bookingId)}/counter-payment`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              amount: bookingFee,
+              notes: "Customer requested cash deposit at desk",
+            }),
+          }
+        );
+        const counterResult = await counterResponse.json();
+        if (!counterResponse.ok || counterResult.success === false) {
+          throw new Error(
+            counterResult.message ||
+              `Cash payment request failed (${counterResponse.status}).`
+          );
+        }
+        const updatedBooking = {
+          ...mergeBooking(getBookingFromResponse(counterResult), bookingRecord),
+          paymentMethod: "counter",
+        };
+        setPendingBooking(updatedBooking);
+        saveBooking(updatedBooking);
+        setConfirmation(updatedBooking);
+        return;
+      }
+
+      const paidBooking = await startOnlinePayment(bookingRecord);
+      if (!paidBooking) {
+        setError("Payment was not completed. Your booking is saved as pending; choose a payment method to continue.");
+        return;
+      }
+      const confirmedBooking = { ...paidBooking, paymentMethod: "online" };
+      setPendingBooking(confirmedBooking);
+      saveBooking(confirmedBooking);
+      setConfirmation(confirmedBooking);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to confirm this reservation.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // =========================================================
@@ -123,7 +349,7 @@ const BookingDetails = () => {
   // =========================================================
 
   const handleChangeTable = () => {
-    navigate("/booking/tables", {
+    navigate("/bookings/tables", {
       state: {
         date,
         guests,
@@ -169,7 +395,7 @@ const BookingDetails = () => {
 
           <button
             type="button"
-            onClick={() => navigate("/booking")}
+            onClick={() => navigate("/bookings")}
             className="text-[#6D5B4D] hover:text-caramel"
           >
             {t.details.reserveTable}
@@ -209,7 +435,7 @@ const BookingDetails = () => {
           >
             <span className="h-2 w-2 rounded-full bg-caramel" />
 
-            {t.details.holding} {table.id}
+            {t.details.holding} {table.tableNumber || table.tableCode || table.id}
 
             <span className="text-[#8A796B]">
               •
@@ -341,6 +567,11 @@ const BookingDetails = () => {
                     • {formattedDate} •{" "}
                     {formattedTime}
                   </p>
+                  {bookingFee > 0 && (
+                    <p className="mt-1 text-[10px] font-semibold text-caramel">
+                      Booking Fee: ₹{bookingFee}
+                    </p>
+                  )}
 
                 </div>
 
@@ -684,6 +915,39 @@ const BookingDetails = () => {
 
               </div>
 
+              {bookingFee > 0 && (
+                <div className="mb-5">
+                  <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.1em] text-[#68574B]">
+                    Payment method · Booking fee ₹{bookingFee}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { value: "online", label: "Pay Online", detail: "Secure Razorpay checkout" },
+                      { value: "counter", label: "Cash at Counter", detail: "Pay at the cafe" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={paymentMethod === option.value}
+                        onClick={() => setPaymentMethod(option.value)}
+                        className={`rounded-xl border p-3 text-left transition ${
+                          paymentMethod === option.value
+                            ? "border-caramel bg-[#F7EDE3]"
+                            : "border-[#E5DBCF] bg-white hover:border-caramel/60"
+                        }`}
+                      >
+                        <span className="block text-[10px] font-semibold text-espresso">
+                          {option.label}
+                        </span>
+                        <span className="mt-1 block text-[8px] text-[#76665A]">
+                          {option.detail}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Policy */}
 
               <label className="mb-5 flex cursor-pointer items-start gap-3">
@@ -735,6 +999,7 @@ const BookingDetails = () => {
               <button
                 type="button"
                 onClick={handleConfirmReservation}
+                disabled={isSubmitting || Boolean(confirmation)}
                 className="
                   flex
                   h-14
@@ -753,9 +1018,23 @@ const BookingDetails = () => {
                   transition
                   hover:bg-caramelHover
                   active:scale-[0.99]
+                  disabled:cursor-wait
+                  disabled:opacity-70
                 "
               >
-                {t.details.confirm}
+                {isSubmitting
+                  ? paymentMethod === "online"
+                    ? "Processing payment..."
+                    : "Submitting..."
+                  : pendingBooking && bookingFee > 0
+                    ? paymentMethod === "online"
+                      ? `Retry Payment · ₹${bookingFee}`
+                      : `Retry Cash Request · ₹${bookingFee}`
+                    : bookingFee > 0
+                      ? paymentMethod === "online"
+                        ? `Pay ₹${bookingFee} & Confirm`
+                        : `Confirm · Pay ₹${bookingFee} at Counter`
+                      : t.details.confirm}
 
                 <svg
                   width="18"
@@ -805,7 +1084,7 @@ const BookingDetails = () => {
               </div>
 
               <p className="text-[10px] leading-5 text-[#624F42]">
-                Table {table.id} enjoys warm natural
+                Table {table.tableNumber || table.tableCode || table.id} enjoys warm natural
                 afternoon sunlight and is ideal for
                 a relaxed cafe experience.
               </p>
@@ -874,7 +1153,7 @@ const BookingDetails = () => {
                     <div className="flex items-center gap-2">
 
                       <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-caramel">
-                        {t.details.instantPass}
+                        {confirmation ? t.details.instantPass : "RESERVATION SUMMARY"}
                       </p>
 
                       <span className="text-[#9B8A7C]">
@@ -882,19 +1161,29 @@ const BookingDetails = () => {
                       </span>
 
                       <span className="text-[9px] text-[#5F7654]">
-                        {t.details.confirmed}
+                        {confirmation
+                          ? isConfirmed
+                            ? t.details.confirmed
+                            : confirmation.paymentMethod === "counter"
+                              ? "Payment due at counter"
+                              : "Payment pending"
+                          : "Awaiting confirmation"}
                       </span>
 
                     </div>
 
                     <h2 className="break-words font-serif text-[26px] leading-tight text-espresso">
-                      {t.details.reserved}
+                      {confirmation
+                        ? isConfirmed
+                          ? t.details.reserved
+                          : "Booking request received"
+                        : "Your table details"}
                     </h2>
 
                     <p className="mt-1 text-[11px] leading-5 text-[#67564A]">
-                      We&apos;re looking forward to
-                      welcoming you at Uncle&apos;s
-                      Coffee.
+                      {confirmation && !isConfirmed
+                        ? "Complete your booking fee payment to confirm this reservation."
+                        : "We're looking forward to welcoming you at Uncle's Coffee."}
                     </p>
 
                   </div>
@@ -936,16 +1225,19 @@ const BookingDetails = () => {
                     </p>
 
                     <p className="mt-1 font-serif text-[21px] text-espresso">
-                      #BK-1042
+                      {confirmation
+                        ? `#${confirmation.bookingId}`
+                        : "Generated after confirmation"}
                     </p>
 
                   </div>
 
                   <button
                     type="button"
+                    disabled={!confirmation}
                     onClick={() =>
                       navigator.clipboard?.writeText(
-                        "#BK-1042"
+                        `#${confirmation.bookingId}`
                       )
                     }
                     className="
@@ -984,7 +1276,7 @@ const BookingDetails = () => {
                     label={t.details.table}
                     value={
                       <>
-                        Table {table.id}
+                        Table {table.tableNumber || table.tableCode || table.id}
                         <span className="text-caramel">
                           {" "}
                           ({table.location})
@@ -1006,7 +1298,7 @@ const BookingDetails = () => {
 
                   <Detail
                     label={t.details.floorZone}
-                    value="Main Roastery Floor"
+                    value={table.area || table.location || "—"}
                   />
 
                 </div>
@@ -1057,7 +1349,7 @@ const BookingDetails = () => {
 
                 </div>
 
-                {/* QR */}
+                {/* Arrival pass */}
 
                 <div
                   className="
@@ -1084,7 +1376,9 @@ const BookingDetails = () => {
                       bg-white
                     "
                   >
-                    <FakeQR />
+                    <span className="font-serif text-[20px] text-caramel">
+                      {confirmation ? "✓" : "—"}
+                    </span>
                   </div>
 
                   <div className="min-w-0">
@@ -1094,9 +1388,9 @@ const BookingDetails = () => {
                     </p>
 
                     <p className="mt-1 text-[10px] leading-5 text-[#68574B]">
-                      Show this digital pass to
-                      the barista or host on arrival
-                      for touchless table seating.
+                      {confirmation
+                        ? `Show reservation code #${confirmation.bookingId} to the host on arrival.`
+                        : "Your reservation code will appear here after confirmation."}
                     </p>
 
                   </div>
@@ -1107,28 +1401,11 @@ const BookingDetails = () => {
 
                 <button
                   type="button"
+                  disabled={!confirmation}
                   onClick={() =>
-                    navigate(
-                      "/bookings/tracking",
-                      {
-                        state: {
-                          bookingId:
-                            "#BK-1042",
-                          customer: {
-                            name,
-                            mobile,
-                            email,
-                            notes,
-                          },
-                          reservation: {
-                            date,
-                            guests,
-                            time,
-                            table,
-                          },
-                        },
-                      }
-                    )
+                    navigate("/bookings/tracking", {
+                      state: confirmation,
+                    })
                   }
                   className="
                     mt-5
@@ -1145,6 +1422,8 @@ const BookingDetails = () => {
                     text-cream
                     transition
                     hover:bg-caramelHover
+                    disabled:cursor-not-allowed
+                    disabled:opacity-60
                   "
                 >
                   <span>◷</span>
@@ -1181,7 +1460,7 @@ const BookingDetails = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    navigate("/booking")
+                    navigate("/bookings")
                   }
                   className="
                     mt-4
@@ -1237,7 +1516,7 @@ const BookingDetails = () => {
               <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[#E4D8CA]">
 
                 <img
-                  src="/table12.jpg"
+                  src={table.image || "/table12.jpg"}
                   alt="Table ambience"
                   className="h-full w-full object-cover"
                   onError={(e) => {
@@ -1251,7 +1530,7 @@ const BookingDetails = () => {
               <div>
 
                 <p className="text-[8px] font-bold uppercase tracking-[0.1em] text-caramel">
-                  TABLE {table.id} AMBIANCE
+                  TABLE {table.tableNumber || table.tableCode || table.id} AMBIANCE
                 </p>
 
                 <p className="mt-1 text-[10px] leading-4 text-[#624F42]">
@@ -1335,7 +1614,9 @@ const BookingDetails = () => {
             "
           >
             <span className="h-2 w-2 rounded-full bg-caramel" />
-            Service Live • Table 12 Active
+            {confirmation
+              ? `Reservation #${confirmation.bookingId} confirmed`
+              : "Complete your guest details to confirm"}
           </div>
 
         </div>
@@ -1367,13 +1648,17 @@ const BookingDetails = () => {
                       <path d="m5 12 4 4L19 6" />
                     </svg>
                   </span>
-                  {t.details.confirmed}
+                  {isConfirmed ? t.details.confirmed : "Booking request received"}
                 </div>
                 <h2 id="confirmation-title" className="mt-4 font-serif text-[30px] leading-tight text-espresso">
-                  {t.details.reserved}
+                  {isConfirmed ? t.details.reserved : "Complete your payment"}
                 </h2>
                 <p className="mt-2 text-[11px] leading-5 text-[#67564A]">
-                  We&apos;re looking forward to welcoming you at Uncle&apos;s Coffee.
+                  {isConfirmed
+                    ? "We're looking forward to welcoming you at Uncle's Coffee."
+                    : confirmation.paymentMethod === "counter"
+                      ? "Your request is saved. Pay the booking fee at the counter to confirm."
+                      : "Your request is saved. Complete payment to confirm your booking."}
                 </p>
               </div>
 
@@ -1391,13 +1676,13 @@ const BookingDetails = () => {
               <div>
                 <p className="text-[#89786B]">{t.details.reservationCode}</p>
                 <p className="mt-1 font-serif text-[19px] text-espresso">
-                  {confirmation.bookingId}
+                  #{confirmation.bookingId}
                 </p>
               </div>
               <div>
                 <p className="text-[#89786B]">{t.details.table}</p>
                 <p className="mt-1 font-serif text-[19px] text-espresso">
-                  Table {confirmation.reservation.table.id}
+                  Table {confirmation.reservation.table.tableNumber || confirmation.reservation.table.tableCode || confirmation.reservation.table.id}
                 </p>
               </div>
               <div>
@@ -1412,6 +1697,14 @@ const BookingDetails = () => {
                   {formatTime(confirmation.reservation.time)}
                 </p>
               </div>
+              {Number(confirmation.reservation.bookingFee) > 0 && (
+                <div>
+                  <p className="text-[#89786B]">BOOKING FEE</p>
+                  <p className="mt-1 font-serif text-[15px] text-espresso">
+                    ₹{Number(confirmation.reservation.bookingFee)}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
@@ -1626,40 +1919,6 @@ const CopyIcon = () => (
     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
   </svg>
 );
-
-
-/* ===========================================================
-   SIMPLE QR PLACEHOLDER
-=========================================================== */
-
-const FakeQR = () => {
-  return (
-    <div className="grid grid-cols-5 gap-[2px] p-1">
-
-      {[
-        1, 1, 1, 0, 1,
-        1, 0, 1, 0, 1,
-        1, 1, 1, 1, 0,
-        0, 1, 0, 1, 1,
-        1, 1, 1, 0, 1,
-      ].map((value, index) => (
-        <span
-          key={index}
-          className={`
-            h-[7px]
-            w-[7px]
-            ${
-              value
-                ? "bg-espresso"
-                : "bg-transparent"
-            }
-          `}
-        />
-      ))}
-
-    </div>
-  );
-};
 
 
 /* ===========================================================

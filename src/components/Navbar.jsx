@@ -1,15 +1,105 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
+import { requestJson } from "../services/orderApi";
+
+const getSavedDineInDetails = () => {
+  try {
+    const dineIn = JSON.parse(localStorage.getItem("uncleCoffeeDineIn") || "{}");
+    const booking = JSON.parse(localStorage.getItem("uncleCoffeeBooking") || "{}");
+    return {
+      customerName: dineIn.customer?.name || booking.customer?.name || "",
+    };
+  } catch {
+    return { customerName: "" };
+  }
+};
 
 const Navbar = () => {
   const { t, language, changeLanguage } = useLanguage();
+  const savedDetails = getSavedDineInDetails();
 
   const [languageOpen, setLanguageOpen] =
     useState(false);
   const [tableEditing, setTableEditing] = useState(false);
-  const [tableNumber, setTableNumber] = useState("12");
-  const [customerName, setCustomerName] = useState("Tushal");
+  const [tables, setTables] = useState([]);
+  const [isLoadingTables, setIsLoadingTables] = useState(true);
+  const [tableError, setTableError] = useState("");
+  const [tableCode, setTableCode] = useState("");
+  const [customerName, setCustomerName] = useState(savedDetails.customerName);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadAvailableTables = async () => {
+      try {
+        const result = await requestJson("/api/tables/all", {
+          signal: controller.signal,
+        });
+        if (!Array.isArray(result.tables)) {
+          throw new Error("The tables API returned an invalid response.");
+        }
+
+        const availableTables = result.tables.filter(
+          (table) => table.isActive === true && table.tableCode
+        );
+        setTables(availableTables);
+        setTableCode((current) => {
+          if (availableTables.some((table) => table.tableCode === current)) {
+            return current;
+          }
+          return "";
+        });
+        if (availableTables.length === 0) {
+          setTableError("No tables are currently available.");
+        }
+      } catch (requestError) {
+        if (requestError.name !== "AbortError") {
+          setTableError(requestError.message || "Unable to load available tables.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingTables(false);
+      }
+    };
+
+    loadAvailableTables();
+    return () => controller.abort();
+  }, []);
+
+  const selectedTable = tables.find((table) => table.tableCode === tableCode);
+
+  const saveDineInDetails = () => {
+    if (!selectedTable) {
+      setTableError("Select an available table before saving.");
+      return;
+    }
+
+    try {
+      const currentDetails = JSON.parse(
+        localStorage.getItem("uncleCoffeeDineIn") || "{}"
+      );
+      localStorage.setItem(
+        "uncleCoffeeDineIn",
+        JSON.stringify({
+          ...currentDetails,
+          enteredTable: selectedTable.tableCode,
+          tableCode: selectedTable.tableCode,
+          customer: {
+            ...currentDetails.customer,
+            name: customerName.trim(),
+          },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent("uncleCoffee:dine-in-updated", {
+          detail: { tableCode: selectedTable.tableCode },
+        })
+      );
+      setTableError("");
+      setTableEditing(false);
+    } catch (storageError) {
+      setTableError(storageError.message || "Unable to save table details.");
+    }
+  };
 
   // =========================================================
   // DESKTOP NAVIGATION STYLE
@@ -399,6 +489,12 @@ const Navbar = () => {
             <button
               type="button"
               onClick={() => setTableEditing((editing) => !editing)}
+              aria-expanded={tableEditing}
+              aria-label={
+                selectedTable
+                  ? `${t.welcome.table} ${selectedTable.tableCode}`
+                  : "Select an available table"
+              }
               className="
                 flex
                 max-w-[150px]
@@ -433,7 +529,9 @@ const Navbar = () => {
               />
 
               <span className="text-[12px] font-bold truncate">
-                {t.welcome.table} {tableNumber} · {customerName}
+                {selectedTable
+                  ? `${t.welcome.table} ${selectedTable.tableCode}${customerName ? ` · ${customerName}` : ""}`
+                  : "Select an available table"}
               </span>
 
               <span
@@ -456,13 +554,30 @@ const Navbar = () => {
               <div className="absolute right-0 top-[calc(100%+8px)] z-[100] w-[min(280px,calc(100vw-24px))] rounded-xl border border-[#E5D9CA] bg-white p-3 shadow-[0_10px_30px_rgba(61,35,20,0.12)]">
                 <div className="grid gap-2">
                   <label className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#806F61]">
-                    {t.welcome.table}
-                    <input
-                      type="text"
-                      value={tableNumber}
-                      onChange={(event) => setTableNumber(event.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg bg-[#F7F2EA] px-3 text-xs text-espresso outline-none focus:ring-2 focus:ring-caramel/20"
-                    />
+                    Available table
+                    <select
+                      value={tableCode}
+                      disabled={isLoadingTables || tables.length === 0}
+                      onChange={(event) => {
+                        setTableCode(event.target.value);
+                        setTableError("");
+                      }}
+                      className="mt-1 h-9 w-full rounded-lg bg-[#F7F2EA] px-3 text-xs text-espresso outline-none focus:ring-2 focus:ring-caramel/20 disabled:opacity-60"
+                    >
+                      <option value="">
+                        {isLoadingTables
+                          ? "Loading available tables…"
+                          : "Select an available table"}
+                      </option>
+                      {tables.map((table) => (
+                        <option
+                          key={table.id || table._id}
+                          value={table.tableCode}
+                        >
+                          {table.tableCode} · {table.name}
+                        </option>
+                      ))}
+                    </select>
                   </label>
 
                   <label className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#806F61]">
@@ -477,11 +592,17 @@ const Navbar = () => {
 
                   <button
                     type="button"
-                    onClick={() => setTableEditing(false)}
+                    onClick={saveDineInDetails}
+                    disabled={isLoadingTables || !selectedTable}
                     className="mt-1 rounded-full bg-caramel px-3 py-2 text-[10px] font-semibold text-cream"
                   >
                     {t.common.save}
                   </button>
+                  {tableError && (
+                    <p role="alert" className="text-[10px] text-red-700">
+                      {tableError}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

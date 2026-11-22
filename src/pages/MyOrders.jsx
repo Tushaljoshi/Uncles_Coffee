@@ -1,109 +1,53 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useLanguage } from "../context/LanguageContext";
+import { API_BASE_URL, requestJson } from "../services/orderApi";
 
-/* =========================================================
-   DEMO ORDER HISTORY
-   Later this will come from your backend/database.
-========================================================= */
-
-const ordersData = [
-  {
-    id: "1042",
-    table: "12",
-    date: "Today",
-    time: "05:42 PM",
-    status: "Preparing",
-    statusType: "active",
-    total: 777,
-    paymentStatus: "Paid via UPI",
-    receiptId: "#REC-1042",
-
-    items: [
-      {
-        id: 1,
-        quantity: 2,
-        name: "Cappuccino",
-        description: "Extra Hot, light cinnamon",
-        price: 440,
-        image:
-          "https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=400&q=85",
-      },
-      {
-        id: 2,
-        quantity: 1,
-        name: "Veg Sandwich",
-        description: "Grilled bell peppers & pesto",
-        price: 220,
-        image:
-          "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=400&q=85",
-      },
-    ],
-
-    additionalItem:
-      "Hand-Cut Herb Fries (Crisp Rosemary)",
-
-    additionalPrice: 117,
-  },
-
-  {
-    id: "1035",
-    table: "8",
-    date: "Yesterday",
-    time: "08:15 PM",
-    status: "Completed",
-    statusType: "completed",
-    total: 540,
-    paymentStatus: "Paid via UPI",
-    receiptId: "#REC-9821",
-
-    items: [
-      {
-        id: 3,
-        quantity: 1,
-        name: "Sea Salt Brownie",
-        description: "Single origin chocolate",
-        price: 180,
-        image:
-          "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=400&q=85",
-      },
-      {
-        id: 4,
-        quantity: 2,
-        name: "Café Latte",
-        description: "Whole milk, medium roast",
-        price: 360,
-        image:
-          "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=400&q=85",
-      },
-    ],
-  },
-
-  {
-    id: "998",
-    table: "4",
-    date: "06 Sep",
-    time: "07:30 PM",
-    status: "Completed",
-    statusType: "completed",
-    total: 410,
-    paymentStatus: "Paid Cash at counter",
-    receiptId: "#REC-9412",
-
-    items: [
-      {
-        id: 5,
-        quantity: 1,
-        name: "Flat White",
-        description: "Cinnamon Knot",
-        price: 410,
-        image:
-          "https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=400&q=85",
-      },
-    ],
-  },
-];
+const formatOrder = (order) => {
+  const date = order.createdAt ? new Date(order.createdAt) : null;
+  const table = order.tableId;
+  return {
+    id: order.orderId || order._id,
+    apiId: order._id || order.id || order.orderId,
+    table:
+      typeof table === "object"
+        ? table?.tableNumber || table?.tableCode || "—"
+        : table || "—",
+    date: date && !Number.isNaN(date.valueOf())
+      ? date.toLocaleDateString()
+      : "—",
+    time: date && !Number.isNaN(date.valueOf())
+      ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : "",
+    status: (order.status || "cart").replace(/^\w/, (letter) => letter.toUpperCase()),
+    statusType: ["served", "cancelled"].includes(order.status)
+      ? "completed"
+      : "active",
+    total: Number(order.total || 0),
+    paymentStatus: `${order.paymentStatus || "pending"} · ${order.paymentMethod || "counter"}`,
+    receiptId: order.paymentId || "",
+    items: (order.items || []).map((item, index) => {
+      const menuItem = typeof item.menuItemId === "object" ? item.menuItemId : {};
+      const image = menuItem.imageUrl || menuItem.image;
+      return {
+        id: menuItem._id || menuItem.id || item.menuItemId || index,
+        quantity: item.quantity,
+        name: item.name || menuItem.name || "Menu item",
+        description: [
+          item.options?.temperature,
+          item.options?.milk,
+          ...(item.options?.extras || []).map((extra) => extra.name),
+          item.note,
+        ].filter(Boolean).join(" · "),
+        price: Number(item.lineTotal || Number(item.unitPrice || 0) * item.quantity),
+        image: image
+          ? new URL(image, API_BASE_URL).toString()
+          : "",
+      };
+    }),
+  };
+};
 
 /* =========================================================
    MAIN PAGE
@@ -113,6 +57,62 @@ const MyOrders = () => {
   const { t } = useLanguage();
   const [activeFilter, setActiveFilter] =
     useState("All Orders");
+  const [ordersData, setOrdersData] = useState([]);
+  const [mobile, setMobile] = useState(
+    localStorage.getItem("uncleCoffeeOrderMobile") || ""
+  );
+  const [mobileQuery, setMobileQuery] = useState(
+    localStorage.getItem("uncleCoffeeOrderMobile") || ""
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!mobileQuery) {
+      setOrdersData([]);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError("");
+    requestJson(
+      `/api/orders/history?mobile=${encodeURIComponent(mobileQuery)}`,
+      { signal: controller.signal }
+    )
+      .then((result) => {
+        if (!Array.isArray(result.orders)) {
+          throw new Error("The order history API returned an invalid response.");
+        }
+        setOrdersData(
+          result.orders
+            .filter((order) => order.status !== "cart")
+            .map(formatOrder)
+        );
+      })
+      .catch((requestError) => {
+        if (requestError.name !== "AbortError") {
+          setError(requestError.message || "Unable to load order history.");
+          setOrdersData([]);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [mobileQuery]);
+
+  const searchOrders = (event) => {
+    event.preventDefault();
+    const normalizedMobile = mobile.replace(/\D/g, "");
+    if (normalizedMobile.length < 10) {
+      setError("Enter a valid 10-digit mobile number.");
+      return;
+    }
+    localStorage.setItem("uncleCoffeeOrderMobile", normalizedMobile);
+    setMobileQuery(normalizedMobile);
+  };
 
   const filters = [
     "All Orders",
@@ -195,7 +195,7 @@ const MyOrders = () => {
               <span className="h-2 w-2 rounded-full bg-caramel" />
 
               <span className="text-[9px] font-semibold text-espresso">
-                Table 12 Connected
+                {mobileQuery ? `Orders for ${mobileQuery}` : "Order history"}
               </span>
 
               <Link
@@ -293,6 +293,36 @@ const MyOrders = () => {
 
           </div>
 
+          <form
+            onSubmit={searchOrders}
+            className="mt-5 flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm sm:flex-row sm:items-end"
+          >
+            <label className="flex-1 text-xs font-semibold text-espresso">
+              Find orders by mobile number
+              <input
+                type="tel"
+                value={mobile}
+                onChange={(event) => setMobile(event.target.value)}
+                inputMode="tel"
+                autoComplete="tel"
+                className="mt-1 h-10 w-full rounded-lg border border-[#EAE1D6] px-3 text-sm"
+                placeholder="10-digit mobile number"
+              />
+            </label>
+            <button
+              type="submit"
+              className="h-10 rounded-full bg-caramel px-5 text-xs font-semibold text-cream"
+            >
+              Find Orders
+            </button>
+          </form>
+
+          {error && (
+            <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </p>
+          )}
+
           {/* =================================================
               CONTENT GRID
           ================================================= */}
@@ -305,14 +335,24 @@ const MyOrders = () => {
 
             <div className="space-y-4">
 
-              {filteredOrders.map((order) => (
+              {isLoading && (
+                <p className="rounded-xl bg-white p-5 text-sm text-[#624B3D]">
+                  Loading orders…
+                </p>
+              )}
+
+              {!isLoading && !mobileQuery && (
+                <EmptyOrders message="Enter your mobile number to view order history." />
+              )}
+
+              {!isLoading && mobileQuery && filteredOrders.map((order) => (
                 <OrderHistoryCard
                   key={order.id}
                   order={order}
                 />
               ))}
 
-              {filteredOrders.length === 0 && (
+              {!isLoading && mobileQuery && filteredOrders.length === 0 && (
                 <EmptyOrders />
               )}
 
@@ -388,7 +428,7 @@ const MyOrders = () => {
                   type="button"
                   className="mt-5 w-full rounded-full bg-caramel py-2.5 text-[9px] font-semibold text-cream transition hover:bg-caramelHover"
                 >
-                  {t.cart.addMore} for Table 12
+                  {t.cart.addMore}
                 </button>
 
                 <p className="mt-2 text-center text-[8px] text-[#806F61]">
@@ -413,8 +453,7 @@ const MyOrders = () => {
                   </h3>
 
                   <p className="mt-1 text-[10px] leading-4 text-[#624B3D]">
-                    Barista is foaming your milk
-                    cappuccino right now.
+                    Your order is {activeOrders[0].status.toLowerCase()}.
                   </p>
 
                   <div className="mt-4 flex items-center gap-3 rounded-xl bg-[#F2EDE5] p-3">
@@ -424,14 +463,14 @@ const MyOrders = () => {
                     </div>
 
                     <span className="text-[9px] text-[#624B3D]">
-                      Est. delivery to Table 12
-                      in ~4 min
+                      Table {activeOrders[0].table}
                     </span>
 
                   </div>
 
                   <Link
                     to="/tracking"
+                    state={{ orderId: activeOrders[0].apiId }}
                     className="mt-3 block text-center text-[9px] font-semibold text-caramel underline underline-offset-2"
                   >
                     View full sensory tracker →
@@ -503,7 +542,7 @@ const MyOrders = () => {
             </span>
 
             <span className="font-medium text-caramel">
-              Table 12 Active
+              Order history
             </span>
 
           </div>
@@ -654,6 +693,7 @@ const OrderHistoryCard = ({ order }) => {
 
             <Link
               to="/tracking"
+              state={{ orderId: order.apiId }}
               className="rounded-full bg-caramel px-4 py-2 text-[9px] font-semibold text-cream transition hover:bg-caramelHover"
             >
               {t.orders.track} →
@@ -712,7 +752,7 @@ const StatusBadge = ({
    EMPTY ORDERS
 ========================================================= */
 
-const EmptyOrders = () => {
+const EmptyOrders = ({ message }) => {
 
   const { t } = useLanguage();
 
@@ -728,7 +768,7 @@ const EmptyOrders = () => {
       </h2>
 
       <p className="mt-1 text-xs text-[#715E50]">
-        Your orders from Table 12 will appear here.
+        {message || "Your order history will appear here."}
       </p>
 
       <Link

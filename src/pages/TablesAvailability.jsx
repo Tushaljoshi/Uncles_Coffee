@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useLanguage } from "../context/LanguageContext";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "");
 
 const TablesAvailability = () => {
   const { t } = useLanguage();
@@ -18,134 +20,160 @@ const TablesAvailability = () => {
     time: "19:30",
   };
 
-  const [selectedTable, setSelectedTable] =
-    useState(null);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [activeLocation, setActiveLocation] = useState("All Areas");
+  const [search, setSearch] = useState("");
+  const [searchField, setSearchField] = useState("search");
+  const [capacityFilter, setCapacityFilter] = useState("");
+  const [allTables, setAllTables] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState("");
 
-  const [activeArea, setActiveArea] =
-    useState("All Areas");
+  useEffect(() => {
+    if (!API_BASE_URL) {
+      setApiError("VITE_API_BASE_URL is not configured.");
+      setIsLoading(false);
+      return undefined;
+    }
 
-  // =========================================================
-  // TABLE DATA
-  // =========================================================
+    const controller = new AbortController();
+    const loadTables = async () => {
+      setIsLoading(true);
+      setApiError("");
 
-  const tables = [
-    {
-      id: 12,
-      name: "Table 12",
-      capacity: 3,
-      area: "Window View",
-      location: "Window Side",
-      description:
-        "Warm Sunlight Alcove",
-      image: "/table12.jpg",
-      features: [
-        "Natural Light",
-        "Quiet Corner",
-        "Street View",
-      ],
-      amenities: [
-        "Power Outlet",
-      ],
-      badge: "GUEST FAVORITE",
-      selected: true,
-    },
+      const allEndpoint = new URL(`${API_BASE_URL}/api/tables/all`);
+      const availabilityEndpoint = new URL(
+        `${API_BASE_URL}/api/tables/availability`
+      );
+      availabilityEndpoint.searchParams.set("date", bookingData.date);
+      availabilityEndpoint.searchParams.set("time", bookingData.time);
+      availabilityEndpoint.searchParams.set(
+        "guests",
+        String(bookingData.guests)
+      );
 
-    {
-      id: 4,
-      name: "Table 04",
-      capacity: 2,
-      area: "Outdoor",
-      location: "Courtyard Patio",
-      description:
-        "Garden Breezeway",
-      image: "/table4.jpg",
-      features: [
-        "Fresh Air",
-        "Bistro Table",
-        "Heated Patio",
-      ],
-      amenities: [
-        "Covered Canopy",
-      ],
-      badge: "OPEN AIR",
-    },
+      const filteredEndpoint = new URL(`${API_BASE_URL}/api/tables`);
+      if (capacityFilter) {
+        filteredEndpoint.searchParams.set("capacity", capacityFilter);
+      }
+      if (search.trim()) {
+        filteredEndpoint.searchParams.set(searchField, search.trim());
+      }
+      if (activeLocation !== "All Areas") {
+        filteredEndpoint.searchParams.set("location", activeLocation);
+      }
 
-    {
-      id: 8,
-      name: "Table 08",
-      capacity: 4,
-      area: "Quiet Booth",
-      location:
-        "Bookshelf Mezzanine Booth",
-      description:
-        "Quiet & cozy seating",
-      image: "/table8.jpg",
-      features: [
-        "Padded Banquette",
-        "Power Plugs",
-        "High Ceiling",
-      ],
-      amenities: [
-        "Reading Nook",
-      ],
-      badge: "SPACIOUS",
-    },
+      try {
+        const responses = await Promise.all([
+          fetch(allEndpoint, { signal: controller.signal }),
+          fetch(availabilityEndpoint, { signal: controller.signal }),
+          fetch(filteredEndpoint, { signal: controller.signal }),
+        ]);
+        const [allResponse, availabilityResponse, filteredResponse] = responses;
+        if (!allResponse.ok) {
+          throw new Error(`Tables request failed (${allResponse.status}).`);
+        }
+        if (!availabilityResponse.ok) {
+          throw new Error(
+            `Availability request failed (${availabilityResponse.status}).`
+          );
+        }
+        if (filteredResponse && !filteredResponse.ok) {
+          throw new Error(`Table search failed (${filteredResponse.status}).`);
+        }
 
-    {
-      id: 2,
-      name: "Table 02",
-      capacity: 2,
-      area: "Near Espresso Bar",
-      location: "Roastery Slow Bar",
-      description:
-        "Brew interaction seating",
-      image: "/table2.jpg",
-      features: [
-        "Bar View",
-        "Coffee Interaction",
-      ],
-      amenities: [
-        "Brew Interaction",
-      ],
-      badge: "COFFEE LOVERS",
-    },
+        const [allResult, availabilityResult, filteredResult] = await Promise.all(
+          responses.map((response) => response.json())
+        );
+        if (!allResult.success || !Array.isArray(allResult.tables)) {
+          throw new Error("The tables API returned an invalid response.");
+        }
+        if (
+          !availabilityResult.success ||
+          !Array.isArray(availabilityResult.tables)
+        ) {
+          throw new Error("The availability API returned an invalid response.");
+        }
+        if (
+          filteredResult &&
+          (!filteredResult.success || !Array.isArray(filteredResult.tables))
+        ) {
+          throw new Error("The table search API returned an invalid response.");
+        }
 
-    {
-      id: 5,
-      name: "Table 05",
-      capacity: 2,
-      area: "Main Floor",
-      location: "Main Floor Center",
-      description:
-        "Reserved until 08:30 PM",
-      image: "/table5.jpg",
-      features: [
-        "Central Seating",
-      ],
-      amenities: [],
-      badge: "OCCUPIED",
-      unavailable: true,
-    },
+        const availabilityById = new Map(
+          availabilityResult.tables.map((table) => [
+            String(table.id || table._id),
+            table,
+          ])
+        );
+        const normalizeTables = (items) =>
+          items.map((item) => {
+            const id = item.id || item._id;
+            const availability = availabilityById.get(String(id));
+            const image = item.imageUrl || item.image;
 
-    {
-      id: 9,
-      name: "Table 09",
-      capacity: 4,
-      area: "Main Floor",
-      location: "Garden Side",
-      description:
-        "Comfortable group seating",
-      image: "/table9.jpg",
-      features: [
-        "Group Seating",
-        "Natural Light",
-      ],
-      amenities: [
-        "Power Outlet",
-      ],
-      badge: "GROUP TABLE",
-    },
-  ];
+            return {
+              ...item,
+              id,
+              tableNumber: Number(item.tableNumber),
+              capacity: Number(item.capacity),
+              features: Array.isArray(item.features) ? item.features : [],
+              amenities: Array.isArray(item.amenities) ? item.amenities : [],
+              bookingFee: Number(item.bookingFee || item.booking_fee || 0),
+              available: Boolean(availability?.available),
+              unavailable: item.isActive === false || !availability?.available,
+              description: item.description || item.area || item.location || "",
+              badge: item.badge || (availability?.available ? "AVAILABLE" : "OCCUPIED"),
+              image: item.imageFileId
+                ? `${API_BASE_URL}/api/tables/file/${encodeURIComponent(item.imageFileId)}`
+                : image
+                  ? new URL(image, API_BASE_URL).toString()
+                  : "",
+            };
+          });
+
+        const catalog = normalizeTables(allResult.tables);
+        const filteredCatalog = normalizeTables(filteredResult.tables);
+        setAllTables(catalog);
+        setTables(filteredCatalog);
+        setSelectedTable((current) => {
+          if (!current) return null;
+          return (
+            filteredCatalog.find(
+              (table) => String(table.id) === String(current.id) && !table.unavailable
+            ) || null
+          );
+        });
+      } catch (requestError) {
+        if (requestError.name !== "AbortError") {
+          setApiError(requestError.message || "Unable to load tables.");
+          setAllTables([]);
+          setTables([]);
+          setSelectedTable(null);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    const timeoutId = window.setTimeout(loadTables, 250);
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [
+    activeLocation,
+    bookingData.date,
+    bookingData.guests,
+    bookingData.time,
+    capacityFilter,
+    search,
+    searchField,
+  ]);
 
   // =========================================================
   // FORMAT DATE
@@ -193,33 +221,41 @@ const TablesAvailability = () => {
   // =========================================================
 
   const filteredTables = tables.filter(
-    (table) => {
-      if (table.unavailable) {
-        return true;
-      }
-
-      if (
-        activeArea !== "All Areas" &&
-        table.area !== activeArea
-      ) {
-        return false;
-      }
-
-      return (
-        table.capacity >= bookingData.guests
-      );
-    }
+    (table) =>
+      table.capacity >= Number(bookingData.guests) &&
+      (!capacityFilter || table.capacity === Number(capacityFilter))
   );
 
   // =========================================================
   // AVAILABLE COUNT
   // =========================================================
 
-  const availableCount = tables.filter(
-    (table) =>
-      !table.unavailable &&
-      table.capacity >= bookingData.guests
+  const availableCount = filteredTables.filter(
+    (table) => !table.unavailable
   ).length;
+
+  const locations = [
+    "All Areas",
+    ...new Set(
+      allTables
+        .map((table) => table.location)
+        .filter(Boolean)
+    ),
+  ];
+  const capacities = [
+    ...new Set(
+      allTables
+        .map((table) => table.capacity)
+        .filter((capacity) => Number.isFinite(capacity))
+    ),
+  ].sort((first, second) => first - second);
+  const mapPositions = [
+    { top: "18%", left: "19%" },
+    { top: "48%", left: "49%" },
+    { top: "49%", left: "28%" },
+    { top: "67%", left: "18%" },
+    { top: "67%", left: "78%" },
+  ];
 
   // =========================================================
   // SELECT TABLE
@@ -485,34 +521,63 @@ const TablesAvailability = () => {
         
         <section className="mx-auto mt-5 grid min-w-0 max-w-[1240px] gap-5 px-4 sm:mt-7 sm:gap-6 sm:px-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)] lg:px-8">
           <div className="min-w-0">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">Search tables</span>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search tables by name or location"
+                  className="w-full rounded-xl border border-[#E8DED0] bg-white px-4 py-3 text-sm text-espresso outline-none placeholder:text-[#9A8B7D] focus:border-caramel sm:max-w-sm"
+                />
+              </label>
+              <label>
+                <span className="sr-only">Search field</span>
+                <select
+                  value={searchField}
+                  onChange={(event) => setSearchField(event.target.value)}
+                  className="w-full rounded-xl border border-[#E8DED0] bg-white px-3 py-3 text-sm text-espresso outline-none focus:border-caramel sm:w-auto"
+                >
+                  <option value="search">All fields</option>
+                  <option value="name">Name only</option>
+                </select>
+              </label>
+              <label>
+                <span className="sr-only">Filter by table capacity</span>
+                <select
+                  value={capacityFilter}
+                  onChange={(event) => setCapacityFilter(event.target.value)}
+                  className="w-full rounded-xl border border-[#E8DED0] bg-white px-3 py-3 text-sm text-espresso outline-none focus:border-caramel sm:w-auto"
+                >
+                  <option value="">Any capacity</option>
+                  {capacities.map((capacity) => (
+                    <option key={capacity} value={capacity}>
+                      {capacity} seats
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             <div className="mb-4 flex min-w-0 gap-2 overflow-x-auto pb-1 sm:mb-5">
 
-              {[
-                "All Areas",
-                "Window View",
-                "Quiet Booth",
-                "Near Espresso Bar",
-                "Outdoor",
-                "Main Floor",
-              ].map((area) => {
+              {locations.map((locationName) => {
 
-                const count =
-                  area === "All Areas"
-                    ? availableCount
-                    : tables.filter(
-                        (table) =>
-                          table.area === area &&
-                          !table.unavailable &&
-                          table.capacity >=
-                            bookingData.guests
-                      ).length;
+                const count = allTables.filter(
+                  (table) =>
+                    (locationName === "All Areas" ||
+                      table.location === locationName) &&
+                    !table.unavailable &&
+                    table.capacity >= Number(bookingData.guests)
+                ).length;
 
                 return (
                   <button
-                    key={area}
+                    key={locationName}
                     type="button"
                     onClick={() =>
-                      setActiveArea(area)
+                      setActiveLocation(locationName)
                     }
                     className={`
                       flex
@@ -526,21 +591,21 @@ const TablesAvailability = () => {
                       font-medium
                       transition
                       ${
-                        activeArea === area
+                        activeLocation === locationName
                           ? "bg-caramel text-cream"
                           : "bg-white text-espresso hover:bg-latte"
                       }
                     `}
                   >
-                    {area === "All Areas"
+                    {locationName === "All Areas"
                       ? t.tables.allAreas
-                      : area}
+                      : locationName}
 
                     <span
                       className={`
                         text-[8px]
                         ${
-                          activeArea === area
+                          activeLocation === locationName
                             ? "text-cream/80"
                             : "text-[#88776A]"
                         }
@@ -557,9 +622,25 @@ const TablesAvailability = () => {
 
             {/* Table cards */}
 
+              {isLoading && (
+                <p className="rounded-xl bg-white p-5 text-sm text-[#6E5C4F]">
+                  Loading tables and availability...
+                </p>
+              )}
+              {apiError && (
+                <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                  {apiError}
+                </p>
+              )}
+              {!isLoading && !apiError && filteredTables.length === 0 && (
+                <p className="rounded-xl bg-white p-5 text-sm text-[#6E5C4F]">
+                  No tables match your search and reservation details.
+                </p>
+              )}
+
             <div className="space-y-4">
 
-              {filteredTables.map(
+                {!isLoading && filteredTables.map(
                 (table) => (
                   <TableCard
                     key={table.id}
@@ -655,7 +736,7 @@ const TablesAvailability = () => {
                   color="bg-caramel"
                   text={
                     selectedTable
-                      ? `Selected (T-${selectedTable.id})`
+                      ? `Selected (T-${selectedTable.tableNumber})`
                       : t.tables.selected
                   }
                 />
@@ -736,86 +817,17 @@ const TablesAvailability = () => {
 
                 </div>
 
-                {/* Table 04 */}
-
-                <MapTable
-                  id={4}
-                  top="18%"
-                  left="19%"
-                  selected={
-                    selectedTable?.id === 4
-                  }
-                  onClick={() =>
-                    handleSelectTable(
-                      tables.find(
-                        (t) => t.id === 4
-                      )
-                    )
-                  }
-                />
-
-                {/* Table 02 */}
-
-                <MapTable
-                  id={2}
-                  top="48%"
-                  left="49%"
-                  selected={
-                    selectedTable?.id === 2
-                  }
-                  onClick={() =>
-                    handleSelectTable(
-                      tables.find(
-                        (t) => t.id === 2
-                      )
-                    )
-                  }
-                />
-
-                {/* Table 05 */}
-
-                <MapTable
-                  id={5}
-                  top="49%"
-                  left="28%"
-                  unavailable
-                />
-
-                {/* Table 12 */}
-
-                <MapTable
-                  id={12}
-                  top="67%"
-                  left="18%"
-                  selected={
-                    selectedTable?.id === 12
-                  }
-                  onClick={() =>
-                    handleSelectTable(
-                      tables.find(
-                        (t) => t.id === 12
-                      )
-                    )
-                  }
-                />
-
-                {/* Table 08 */}
-
-                <MapTable
-                  id={8}
-                  top="67%"
-                  left="78%"
-                  selected={
-                    selectedTable?.id === 8
-                  }
-                  onClick={() =>
-                    handleSelectTable(
-                      tables.find(
-                        (t) => t.id === 8
-                      )
-                    )
-                  }
-                />
+                {filteredTables.slice(0, mapPositions.length).map((table, index) => (
+                  <MapTable
+                    key={table.id}
+                    id={table.tableNumber}
+                    top={mapPositions[index].top}
+                    left={mapPositions[index].left}
+                    selected={String(selectedTable?.id) === String(table.id)}
+                    unavailable={table.unavailable}
+                    onClick={() => handleSelectTable(table)}
+                  />
+                ))}
 
                 {/* Main entrance */}
 
@@ -869,7 +881,7 @@ const TablesAvailability = () => {
                         text-cream
                       "
                     >
-                      {selectedTable.id}
+                      {selectedTable.tableNumber}
                     </div>
 
                     <div className="min-w-0">
@@ -966,7 +978,7 @@ const TablesAvailability = () => {
                 text-cream
               "
             >
-              {selectedTable?.id || "—"}
+              {selectedTable?.tableNumber || "—"}
             </div>
 
             <div className="min-w-0">
@@ -1218,8 +1230,8 @@ const TableCard = ({
             backdrop-blur-sm
           "
         >
-          T-{String(table.id).padStart(2, "0")}
-        </span>
+          T-{String(table.tableNumber).padStart(2, "0")}
+         </span>
 
       </div>
 
@@ -1268,6 +1280,11 @@ const TableCard = ({
           <span>
             ♙ {table.capacity} Guests
           </span>
+          {Number(table.bookingFee) > 0 && (
+            <span className="font-semibold text-caramel">
+              • Booking Fee ₹{Number(table.bookingFee)}
+            </span>
+          )}
 
           {table.amenities.map(
             (amenity) => (
@@ -1278,6 +1295,8 @@ const TableCard = ({
           )}
 
         </div>
+
+        
 
         <div className="mt-3 flex flex-wrap gap-1.5">
 
@@ -1307,12 +1326,19 @@ const TableCard = ({
 
       <div className="flex shrink-0 items-center justify-between gap-3 sm:block sm:text-right">
 
-        <div className="hidden text-[8px] font-semibold uppercase tracking-[0.12em] text-[#806F61] sm:block">
-          {table.unavailable
-            ? t.tables.occupied
-            : selected
-            ? t.tables.currentPick
-            : t.tables.availableLabelUpper}
+        <div className="hidden sm:block">
+          {Number(table.bookingFee) > 0 && (
+            <p className="mb-1 text-[9px] font-semibold text-caramel">
+              Booking Fee: ₹{Number(table.bookingFee)}
+            </p>
+          )}
+          <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[#806F61]">
+            {table.unavailable
+              ? t.tables.occupied
+              : selected
+              ? t.tables.currentPick
+              : t.tables.availableLabelUpper}
+          </div>
         </div>
 
         <button

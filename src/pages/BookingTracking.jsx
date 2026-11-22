@@ -3,6 +3,34 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useLanguage } from "../context/LanguageContext";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "");
+
+const readStoredBooking = () => {
+  try {
+    return JSON.parse(localStorage.getItem("uncleCoffeeBooking") || "null");
+  } catch {
+    return null;
+  }
+};
+
+const formatStatus = (status = "") =>
+  status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const getStatusLabel = (status, translations) => {
+  const labels = {
+    requested: translations.bookingRequested,
+    confirmed: translations.reservationConfirmed,
+    preparing: translations.preparing,
+    ready: translations.readyArrival,
+    checked_in: translations.checkedIn,
+    completed: translations.completed,
+    cancelled: translations.cancelled,
+  };
+  return labels[status] || formatStatus(status);
+};
+
 const BookingTracking = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -12,88 +40,212 @@ const BookingTracking = () => {
   // GET BOOKING DATA
   // =========================================================
 
-  const stateBooking = location.state;
-
-  const savedBooking = localStorage.getItem(
-    "uncleCoffeeBooking"
+  const [bookingCandidate, setBookingCandidate] = useState(
+    () => location.state || readStoredBooking() || {}
   );
-
-  const storedBooking = savedBooking
-    ? JSON.parse(savedBooking)
-    : null;
-
-  const bookingData =
-    stateBooking || storedBooking || {};
-
-  // =========================================================
-  // DEFAULT DATA
-
-  const reservation =
-    bookingData.reservation || {
-      date: "2026-09-12",
-      guests: 2,
-      time: "19:30",
-      table: {
-        id: 12,
-        name: "Table 12",
-        location: "Window View",
-      },
-    };
-
-  const customer =
-    bookingData.customer || {
-      name: "Tushal",
-      mobile: "9876543210",
-    };
-
+  const [bookingData, setBookingData] = useState({});
+  const candidateBookingId =
+    bookingCandidate.bookingId ||
+    bookingCandidate.id ||
+    bookingCandidate._id ||
+    "";
+  const candidateMobile = bookingCandidate.customer?.mobile || "";
+  const reservation = bookingData.reservation || {};
+  const table =
+    reservation.table ||
+    (typeof reservation.tableId === "object" ? reservation.tableId : {}) ||
+    {};
+  const tableLabel = table.tableNumber
+    ? `Table ${table.tableNumber}`
+    : table.tableCode || table.name || "";
+  const customer = bookingData.customer || {};
+  const bookingFee = Number(
+    reservation.bookingFee ??
+    reservation.booking_fee ??
+    bookingData.bookingFee ??
+    bookingData.booking_fee ??
+    table.bookingFee ??
+    table.booking_fee ??
+    0
+  );
   const bookingId =
-    bookingData.bookingId || "#BK-1042";
+    bookingData.bookingId || bookingData.id || bookingData._id || "";
+  const displayBookingId = bookingId
+    ? `#${String(bookingId).replace(/^#/, "")}`
+    : "";
+  const currentStatus = String(bookingData.status || "").toLowerCase();
+  const statusHistory = Array.isArray(bookingData.statusHistory)
+    ? bookingData.statusHistory
+    : [];
+  const latestStatusUpdate = statusHistory[statusHistory.length - 1];
+  const timelineItems = statusHistory.length
+    ? statusHistory
+    : currentStatus
+      ? [{
+          status: currentStatus,
+          message: bookingData.statusMessage || "",
+          at: bookingData.updatedAt || bookingData.createdAt,
+        }]
+      : [];
+    const hasBooking = Boolean(bookingId);
+    const currentStatusLabel = currentStatus
+      ? getStatusLabel(currentStatus, t.bookingTracking)
+      : "";
+    const isTerminalStatus = ["completed", "cancelled"].includes(currentStatus);
+  const reservationImageFileId =
+    bookingData.imageFileId || reservation.imageFileId;
+  const reservationImageUrl = bookingData.imageUrl || bookingData.image;
+  const tableImage = reservationImageFileId
+    ? API_BASE_URL
+      ? `${API_BASE_URL}/api/reservations/file/${encodeURIComponent(reservationImageFileId)}`
+      : ""
+    : reservationImageUrl
+      ? API_BASE_URL
+        ? new URL(reservationImageUrl, API_BASE_URL).toString()
+        : reservationImageUrl
+    : table.imageFileId
+      ? API_BASE_URL
+        ? `${API_BASE_URL}/api/tables/file/${encodeURIComponent(table.imageFileId)}`
+        : ""
+      : table.imageUrl || table.image
+        ? API_BASE_URL
+          ? new URL(table.imageUrl || table.image, API_BASE_URL).toString()
+          : table.imageUrl || table.image
+        : "";
 
   // =========================================================
   // CURRENT STATUS
   // =========================================================
-
-  const [currentStep, setCurrentStep] =
-    useState(2);
 
   const [activeFilter, setActiveFilter] =
     useState("All");
 
   const [showCancelPopup, setShowCancelPopup] =
     useState(false);
-
-  // =========================================================
-  // SIMULATE LIVE BOOKING STATUS
-  // =========================================================
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentStep(2);
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // =========================================================
-  // SAVE BOOKING
-  // =========================================================
-
-  useEffect(() => {
-    if (bookingData && Object.keys(bookingData).length) {
-      localStorage.setItem(
-        "uncleCoffeeBooking",
-        JSON.stringify(bookingData)
-      );
-    }
-  }, []);
-
-  // =========================================================
-  // FORMAT DATE
-  // =========================================================
-
-  const formattedDate = formatDate(
-    reservation.date
+  const [history, setHistory] = useState([]);
+  const [historyMobile, setHistoryMobile] = useState(
+    candidateMobile
   );
+  const [mobileInput, setMobileInput] = useState(candidateMobile);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [copiedBooking, setCopiedBooking] = useState(false);
+  const [tableImageError, setTableImageError] = useState(false);
+
+  useEffect(() => {
+    if (location.state) {
+      setBookingCandidate(location.state);
+      setBookingData({});
+      setHistoryMobile(location.state.customer?.mobile || "");
+      setMobileInput(location.state.customer?.mobile || "");
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    setTableImageError(false);
+  }, [tableImage]);
+
+  useEffect(() => {
+    const mobile = historyMobile.replace(/\D/g, "");
+    if (!mobile) {
+      setHistory([]);
+      setBookingData({});
+      setIsLoadingHistory(false);
+      return undefined;
+    }
+    if (!API_BASE_URL) {
+      setHistoryError("VITE_API_BASE_URL is not configured.");
+      setIsLoadingHistory(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const loadHistory = async () => {
+      setIsLoadingHistory(true);
+      setHistoryError("");
+      try {
+        const endpoint = new URL(`${API_BASE_URL}/api/reservations/history`);
+        endpoint.searchParams.set("mobile", mobile);
+        const response = await fetch(endpoint, { signal: controller.signal });
+        const result = await response.json();
+        if (!response.ok || !result.success || !Array.isArray(result.reservations)) {
+          throw new Error(
+            result.message || `Reservation history request failed (${response.status}).`
+          );
+        }
+        setHistory(result.reservations);
+        setLastRefreshed(new Date());
+        const currentRecord = result.reservations.find(
+          (record) =>
+            String(record.bookingId || record.id || record._id || "") ===
+            String(candidateBookingId).replace(/^#/, "")
+        );
+        if (
+          currentRecord &&
+          candidateBookingId &&
+          mobile === String(candidateMobile).replace(/\D/g, "")
+        ) {
+          setBookingData(currentRecord);
+          try {
+            localStorage.setItem(
+              "uncleCoffeeBooking",
+              JSON.stringify(currentRecord)
+            );
+          } catch {
+            setHistoryError("Unable to save the refreshed reservation locally.");
+          }
+        } else if (candidateBookingId) {
+          setBookingData({});
+          try {
+            const storedBooking = readStoredBooking();
+            const storedBookingId =
+              storedBooking?.bookingId ||
+              storedBooking?.id ||
+              storedBooking?._id ||
+              "";
+            if (
+              String(storedBookingId).replace(/^#/, "") ===
+              String(candidateBookingId).replace(/^#/, "")
+            ) {
+              localStorage.removeItem("uncleCoffeeBooking");
+            }
+          } catch {
+            setHistoryError("Unable to clear an unverified reservation from this browser.");
+          }
+        }
+      } catch (requestError) {
+        if (requestError.name !== "AbortError") {
+          setHistoryError(
+            requestError.message || "Unable to load reservation history."
+          );
+          setHistory([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingHistory(false);
+        }
+      }
+    };
+
+    loadHistory();
+    const refreshInterval = window.setInterval(
+      () => setHistoryRefresh((value) => value + 1),
+      30000
+    );
+    return () => {
+      controller.abort();
+      window.clearInterval(refreshInterval);
+    };
+  }, [
+    candidateBookingId,
+    candidateMobile,
+    historyMobile,
+    historyRefresh,
+  ]);
 
   // =========================================================
   // FORMAT TIME
@@ -107,69 +259,149 @@ const BookingTracking = () => {
   // HISTORY DATA
   // =========================================================
 
-  const history = [
-    {
-      id: bookingId,
-      date: "Today",
-      table: `Table ${reservation.table?.id || 12}`,
-      guests: reservation.guests || 2,
-      area:
-        reservation.table?.location ||
-        "Window View",
-      time: formattedTime,
-      status: "Confirmed",
-      statusType: "upcoming",
-      action: "View Tracking",
-      description:
-        "Host Maya preparing table",
-    },
-    {
-      id: "#BK-1035",
-      date: "Yesterday",
-      table: "Table 08",
-      area: "Roaster Booth",
-      time: "08:15 PM",
-      status: "Completed",
-      statusType: "completed",
-      action: "Book Again",
-      description: "Paid • Bill ₹1,850",
-    },
-  ];
+  const historyItems = history.map((record) => {
+    const historyReservation = record.reservation || {};
+    const historyTable =
+      typeof historyReservation.tableId === "object"
+        ? historyReservation.tableId
+        : historyReservation.table || {};
+    const status = String(record.status || "").toLowerCase();
+    const statusType =
+      status === "cancelled"
+        ? "cancelled"
+        : status === "completed"
+          ? "completed"
+          : ["requested", "confirmed", "preparing", "ready", "checked_in"].includes(
+                status
+              )
+            ? "upcoming"
+            : "unknown";
+    const latestUpdate =
+      record.statusHistory?.[record.statusHistory.length - 1];
 
+    return {
+      id: record.bookingId || record.id || record._id,
+      date: formatDate(historyReservation.date),
+      table: historyTable.tableNumber
+        ? `Table ${historyTable.tableNumber}`
+        : historyTable.tableCode ||
+          historyTable.name ||
+          "Table details unavailable",
+      guests: historyReservation.guests || "",
+      area: historyTable.location || historyTable.area || "",
+      time: formatTime(historyReservation.time),
+      status: status ? formatStatus(status) : "Status unavailable",
+      statusType,
+      description:
+        latestUpdate?.message ||
+        (status ? formatStatus(status) : "No status update provided."),
+      record,
+    };
+  });
   const filteredHistory =
     activeFilter === "All"
-      ? history
-      : history.filter((item) => {
-          if (
-            activeFilter === "Upcoming"
-          ) {
+      ? historyItems
+      : historyItems.filter((item) => {
+          if (activeFilter === "Upcoming") {
             return item.statusType === "upcoming";
           }
-          if (
-            activeFilter === "Completed"
-          ) {
+          if (activeFilter === "Completed") {
             return item.statusType === "completed";
           }
-
-          if (
-            activeFilter === "Cancelled"
-          ) {
+          if (activeFilter === "Cancelled") {
             return item.statusType === "cancelled";
           }
-
           return true;
         });
+  const historyCounts = historyItems.reduce(
+    (counts, item) => {
+      counts[item.statusType] = (counts[item.statusType] || 0) + 1;
+      return counts;
+    },
+    {}
+  );
 
   // =========================================================
   // CANCEL BOOKING
   // =========================================================
 
-  const handleCancel = () => {
-    localStorage.removeItem(
-      "uncleCoffeeBooking"
-    );
+  const handleCancel = async () => {
+    setHistoryError("");
+    if (!bookingId || !customer.mobile) {
+      setHistoryError("A booking ID and mobile number are required to cancel.");
+      return;
+    }
+    if (!API_BASE_URL) {
+      setHistoryError("VITE_API_BASE_URL is not configured.");
+      return;
+    }
 
-    navigate("/bookings");
+    setIsCancelling(true);
+    try {
+      const endpoint = `${API_BASE_URL}/api/reservations/${encodeURIComponent(
+        String(bookingId).replace(/^#/, "")
+      )}/cancel`;
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mobile: customer.mobile,
+          reason: cancelReason.trim(),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.success === false) {
+        throw new Error(
+          result.message || `Cancellation failed (${response.status}).`
+        );
+      }
+
+      const returnedRecord =
+        result.reservation ||
+        result.booking ||
+        result.data?.reservation ||
+        result.data?.booking ||
+        result.data;
+      if (returnedRecord?.bookingId || returnedRecord?.id || returnedRecord?._id) {
+        setBookingData(returnedRecord);
+        try {
+          localStorage.setItem(
+            "uncleCoffeeBooking",
+            JSON.stringify(returnedRecord)
+          );
+        } catch {
+          setHistoryError("Reservation cancelled, but this browser could not save the update locally.");
+        }
+      }
+      setShowCancelPopup(false);
+      setHistoryRefresh((value) => value + 1);
+    } catch (requestError) {
+      setHistoryError(requestError.message || "Unable to cancel this reservation.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handleLookupHistory = () => {
+    const mobile = mobileInput.replace(/\D/g, "");
+    if (mobile.length < 10) {
+      setHistoryError("Enter a valid 10-digit mobile number.");
+      return;
+    }
+    setHistoryError("");
+    setHistoryMobile(mobile);
+    setHistoryRefresh((value) => value + 1);
+  };
+
+  const handleCopyBooking = async () => {
+    if (!bookingId) return;
+    try {
+      await navigator.clipboard.writeText(String(bookingId).replace(/^#/, ""));
+      setCopiedBooking(true);
+      window.setTimeout(() => setCopiedBooking(false), 1800);
+    } catch {
+      setHistoryError("Could not copy the reservation ID. Please copy it manually.");
+    }
   };
 
   // =========================================================
@@ -224,7 +456,7 @@ const BookingTracking = () => {
                     text-caramel
                   "
                 >
-                  SLOW BAR HOSPITALITY
+                    {hasBooking ? "RESERVATION DETAILS" : "BOOKING HISTORY"}
                 </p>
 
               </div>
@@ -250,6 +482,7 @@ const BookingTracking = () => {
 
             {/* Booking credentials */}
 
+            {hasBooking && (
             <div
               className="
                 flex
@@ -286,7 +519,7 @@ const BookingTracking = () => {
                   </p>
 
                   <p className="text-[11px] font-semibold text-espresso">
-                    {bookingId}
+                    {displayBookingId || "—"}
                   </p>
 
                 </div>
@@ -317,10 +550,9 @@ const BookingTracking = () => {
                   </p>
 
                   <p className="text-[11px] font-semibold text-espresso">
-                    +91{" "}
-                    {formatPhone(
-                      customer.mobile
-                    )}
+                    {customer.mobile
+                      ? `+91 ${formatPhone(customer.mobile)}`
+                      : "—"}
                   </p>
 
                 </div>
@@ -328,6 +560,7 @@ const BookingTracking = () => {
               </div>
 
             </div>
+            )}
 
           </div>
 
@@ -337,6 +570,7 @@ const BookingTracking = () => {
             ACTIVE BOOKING GRID
         =================================================== */}
 
+        {hasBooking ? (
         <section className="grid min-w-0 gap-5 sm:gap-7 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)]">
 
           {/* =================================================
@@ -376,42 +610,50 @@ const BookingTracking = () => {
                 <div className="mt-2 flex flex-wrap items-baseline gap-2">
 
                   <h2 className="font-serif text-[27px] text-espresso">
-                    {bookingId}
+                    {displayBookingId || "—"}
                   </h2>
 
-                  <span className="text-[11px] text-[#79685C]">
-                    • Slow Roast Lounge
-                  </span>
+                  {(table.area || table.location) && (
+                    <span className="text-[11px] text-[#79685C]">
+                      • {table.area || table.location}
+                    </span>
+                  )}
 
                 </div>
 
               </div>
 
-              {/* Status */}
-
-              <div
-                className="
-                  flex
-                  w-fit
-                  items-center
-                  gap-2
-                  rounded-full
-                  bg-[#F1DCCF]
-                  px-4
-                  py-2
-                  text-[9px]
-                  font-semibold
-                  text-caramel
-                "
-              >
-
-                <span className="h-3 w-3 rounded-full bg-caramel" />
-
-                {t.bookingTracking.preparing}
-
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex w-fit items-center gap-2 rounded-full bg-[#F1DCCF] px-4 py-2 text-[9px] font-semibold text-caramel">
+                  <span className="h-2 w-2 rounded-full bg-caramel" />
+                  {currentStatusLabel || "Status unavailable"}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setHistoryRefresh((value) => value + 1)}
+                  disabled={isLoadingHistory}
+                  className="rounded-full border border-[#E4D7CA] bg-white px-4 py-2 text-[9px] font-semibold text-espresso transition hover:bg-[#F7F1E9] disabled:opacity-50"
+                >
+                  {isLoadingHistory ? "Refreshing…" : "Refresh"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyBooking}
+                  className="rounded-full border border-[#E4D7CA] bg-white px-4 py-2 text-[9px] font-semibold text-espresso transition hover:bg-[#F7F1E9]"
+                >
+                  {copiedBooking ? "Copied" : "Copy ID"}
+                </button>
               </div>
 
             </div>
+            {lastRefreshed && (
+              <p className="-mt-3 mb-4 text-[9px] text-[#806F61]" aria-live="polite">
+                Last updated {lastRefreshed.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            )}
 
             {/* =================================================
                 READY TIME
@@ -455,7 +697,10 @@ const BookingTracking = () => {
                 <div className="flex flex-wrap items-center gap-2">
 
                   <p className="text-[11px] font-semibold text-espresso">
-                    {t.bookingTracking.readyBy} 07:20 PM
+                    {t.bookingTracking.readyBy}{" "}
+                    {bookingData.estimatedReadyAt
+                      ? formatDateTime(bookingData.estimatedReadyAt)
+                      : "—"}
                   </p>
 
                   <span
@@ -469,15 +714,16 @@ const BookingTracking = () => {
                       text-caramel
                     "
                   >
-                    {t.bookingTracking.early}
+                    {bookingData.estimatedReadyAt ? "ESTIMATE" : currentStatusLabel}
                   </span>
 
                 </div>
 
                 <p className="mt-1 text-[10px] leading-4 text-[#705E51]">
-                  Host Maya is hand-arranging fresh
-                  water carafes and botanical linens
-                  for you.
+                  {latestStatusUpdate?.message ||
+                    (statusHistory.length
+                      ? "No additional status note."
+                      : "No status note has been provided.")}
                 </p>
 
               </div>
@@ -497,50 +743,38 @@ const BookingTracking = () => {
                   absolute
                   left-[15px]
                   top-4
-                  h-[290px]
                   w-px
                   bg-[#D9CEC2]
                 "
+                style={{
+                  height: `${Math.max(0, timelineItems.length - 1) * 64}px`,
+                }}
               />
 
-              <TimelineItem
-                number="✓"
-                title={t.bookingTracking.bookingRequested}
-                description="Online dine-in request submitted"
-                time="04:15 PM"
-                completed
-              />
+              {timelineItems.length === 0 && (
+                <p className="rounded-xl border border-dashed border-[#D9CEC2] bg-white/70 p-4 text-xs text-[#705E51]">
+                  No status updates have been received yet.
+                </p>
+              )}
 
-              <TimelineItem
-                number="✓"
-                title={t.bookingTracking.reservationConfirmed}
-                description="Seating allocated in slow bar zone"
-                time="04:16 PM"
-                completed
-              />
+              {timelineItems.map((item, index) => {
+                const status = String(item.status || "").toLowerCase();
+                const completed = index < timelineItems.length - 1;
+                const active = index === timelineItems.length - 1;
 
-              <TimelineItem
-                number="✦"
-                title={t.bookingTracking.preparing}
-                description="Host setting artisan ceramic ware, brass cutlery, and chilled infused water."
-                time="In Progress"
-                active
-              />
-
-              <TimelineItem
-                number=""
-                title={t.bookingTracking.readyArrival}
-                description="Priority escort waiting at front counter"
-                time="Est. 07:20 PM"
-              />
-
-              <TimelineItem
-                number=""
-                title={t.bookingTracking.checkedIn}
-                description="Enjoy your handcrafted slow roast session"
-                time="Target 07:30 PM"
-                last
-              />
+                return (
+                  <TimelineItem
+                    key={item.id || `${status}-${item.at || index}`}
+                    number={completed ? "✓" : active ? "✦" : ""}
+                    title={getStatusLabel(status, t.bookingTracking)}
+                    description={item.message || getStatusLabel(status, t.bookingTracking)}
+                    time={item.at ? formatDateTime(item.at) : "—"}
+                    completed={completed}
+                    active={active}
+                    last={index === timelineItems.length - 1}
+                  />
+                );
+              })}
 
             </div>
 
@@ -564,14 +798,16 @@ const BookingTracking = () => {
 
               <Summary
                 label="SEATING"
-                value={`Table ${
-                  reservation.table?.id || 12
-                }`}
+                value={tableLabel || "—"}
               />
 
               <Summary
                 label="PARTY SIZE"
-                value={`${reservation.guests} Guests`}
+                value={
+                  reservation.guests
+                    ? `${reservation.guests} Guests`
+                    : "—"
+                }
               />
 
               <Summary
@@ -582,10 +818,16 @@ const BookingTracking = () => {
               <Summary
                 label="ATMOSPHERE"
                 value={
-                  reservation.table?.location ||
-                  "Window View"
+                  table.location || table.area || "—"
                 }
               />
+
+              {bookingFee > 0 && (
+                <Summary
+                  label="BOOKING FEE"
+                  value={`₹${bookingFee}`}
+                />
+              )}
 
             </div>
 
@@ -593,7 +835,7 @@ const BookingTracking = () => {
                 ACTION BUTTONS
             ================================================= */}
 
-            <div className="mt-6 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <div className="mt-6 grid gap-2 sm:grid-cols-[1fr_auto]">
 
               <button
                 type="button"
@@ -620,28 +862,7 @@ const BookingTracking = () => {
 
               <button
                 type="button"
-                className="
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
-                  rounded-full
-                  bg-[#EAE5DE]
-                  px-4
-                  py-3
-                  text-[10px]
-                  font-medium
-                  text-espresso
-                  transition
-                  hover:bg-latte
-                "
-              >
-                <span>♧</span>
-                {t.bookingTracking.callHost}
-              </button>
-
-              <button
-                type="button"
+                disabled={!bookingId || !customer.mobile || isTerminalStatus}
                 onClick={() => setShowCancelPopup(true)}
                 className="
                   rounded-full
@@ -653,6 +874,8 @@ const BookingTracking = () => {
                   text-error
                   transition
                   hover:bg-[#F5C8C1]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
                 "
               >
                 ⊗ {t.bookingTracking.cancel}
@@ -683,15 +906,18 @@ const BookingTracking = () => {
 
               <div className="relative h-[230px] overflow-hidden bg-[#E4D8CA]">
 
-                <img
-                  src="/table12.jpg"
-                  alt="Reserved table"
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display =
-                      "none";
-                  }}
-                />
+                {tableImage && !tableImageError ? (
+                  <img
+                    src={tableImage}
+                    alt={table.name || table.tableCode || "Reserved table"}
+                    className="h-full w-full object-cover"
+                      onError={() => setTableImageError(true)}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center bg-gradient-to-br from-[#EFE6DB] to-[#DCCBBC] text-sm font-medium text-[#715E50]">
+                    No table photo available
+                  </div>
+                )}
 
                 <span
                   className="
@@ -718,81 +944,32 @@ const BookingTracking = () => {
                 <div className="flex items-start justify-between gap-3">
 
                   <h3 className="font-serif text-[23px] leading-tight text-espresso">
-                    Window Slow Bar No.{" "}
-                    {reservation.table?.id || 12}
+                    {table.name ||
+                      table.tableCode ||
+                      (table.tableNumber
+                        ? `Table ${table.tableNumber}`
+                        : "Table details unavailable")}
                   </h3>
 
-                  <span className="whitespace-nowrap text-[8px] font-bold uppercase text-caramel">
-                    QUIET ZONE
-                  </span>
+                  {table.capacity && (
+                    <span className="whitespace-nowrap rounded-full bg-[#F5F0E8] px-3 py-1.5 text-[8px] font-bold uppercase text-caramel">
+                      {table.capacity} seats
+                    </span>
+                  )}
 
                 </div>
 
                 <p className="mt-2 text-[10px] leading-5 text-[#69584C]">
-                  Features natural garden view,
-                  individual brass task lighting,
-                  and proximity to the manual V60
-                  slow drip station.
+                  {table.location || table.area || "Table details unavailable."}
+                  {table.capacity ? ` • Seats up to ${table.capacity}` : ""}
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-4 text-[8px] font-medium text-[#6C5A4D]">
-
-                  <span>⌁ High-Speed WiFi</span>
-                  <span>♧ AC Sockets</span>
-                  <span>▱ Cushioned Bench</span>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* =================================================
-                HOST NOTE
-            ================================================= */}
-
-            <div
-              className="
-                mt-5
-                rounded-[24px]
-                bg-[#F0EBE4]
-                p-5
-              "
-            >
-
-              <div className="flex gap-4">
-
-                <div
-                  className="
-                    flex
-                    h-11
-                    w-11
-                    shrink-0
-                    items-center
-                    justify-center
-                    rounded-full
-                    bg-caramel
-                    text-xl
-                    text-cream
-                  "
-                >
-                  ☕
-                </div>
-
-                <div>
-
-                  <h3 className="font-serif text-[18px] text-espresso">
-                    Host Courtesy Note
-                  </h3>
-
-                  <p className="mt-1 text-[10px] leading-5 text-[#67564A]">
-                    We hold reserved tables for up
-                    to 15 minutes past scheduled
-                    arrival. If you&apos;re experiencing
-                    unexpected traffic or delays,
-                    simply call host Maya or tap
-                    modify below.
-                  </p>
+                  {[...(table.features || []), ...(table.amenities || [])]
+                    .slice(0, 4)
+                    .map((feature) => (
+                      <span key={feature}>{feature}</span>
+                    ))}
 
                 </div>
 
@@ -803,6 +980,37 @@ const BookingTracking = () => {
           </aside>
 
         </section>
+        ) : (
+          <section className="overflow-hidden rounded-[28px] border border-[#E8DED1] bg-gradient-to-br from-white to-[#F5F0E8] px-6 py-12 text-center shadow-[0_12px_35px_rgba(61,35,20,0.07)] sm:px-12 sm:py-16">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F2E5D9] text-2xl text-caramel">
+              ◷
+            </div>
+            <h2 className="mt-5 font-serif text-3xl text-espresso">
+              No reservation selected
+            </h2>
+            <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-[#6F5E52]">
+              Look up a reservation using the mobile number attached to it, or start a new booking.
+            </p>
+            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() =>
+                  document.getElementById("reservation-history-mobile")?.focus()
+                }
+                className="rounded-full bg-caramel px-6 py-3 text-sm font-semibold text-cream transition hover:bg-caramelHover"
+              >
+                Find my reservation
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/bookings")}
+                className="rounded-full border border-[#E5D8CA] bg-white px-6 py-3 text-sm font-semibold text-espresso transition hover:bg-[#F7F1E9]"
+              >
+                Book a table
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* ===================================================
             RESERVATION HISTORY
@@ -830,6 +1038,34 @@ const BookingTracking = () => {
                 {t.bookingTracking.historyIntro}
               </p>
 
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <label>
+                <span className="sr-only">Mobile number for reservation history</span>
+                <input
+                  id="reservation-history-mobile"
+                  type="tel"
+                  inputMode="numeric"
+                  value={mobileInput}
+                  onChange={(event) =>
+                    setMobileInput(
+                      event.target.value.replace(/\D/g, "").slice(0, 10)
+                    )
+                  }
+                  placeholder="10-digit mobile number"
+                  disabled={isLoadingHistory}
+                  className="w-full rounded-full border border-[#E8DED0] bg-white px-4 py-2.5 text-[10px] text-espresso outline-none focus:border-caramel sm:w-48"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleLookupHistory}
+                disabled={isLoadingHistory || mobileInput.replace(/\D/g, "").length < 10}
+                className="rounded-full bg-caramel px-4 py-2.5 text-[10px] font-semibold text-cream transition hover:bg-caramelHover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLoadingHistory ? "Loading…" : "Find reservations"}
+              </button>
             </div>
 
             {/* Filters */}
@@ -879,9 +1115,11 @@ const BookingTracking = () => {
                     ? t.bookingTracking.completed
                     : t.bookingTracking.cancelled}
                   {filter === "Upcoming" &&
-                    " (1)"}
+                    ` (${historyCounts.upcoming || 0})`}
                   {filter === "Completed" &&
-                    " (1)"}
+                    ` (${historyCounts.completed || 0})`}
+                  {filter === "Cancelled" &&
+                    ` (${historyCounts.cancelled || 0})`}
                 </button>
               ))}
 
@@ -893,17 +1131,32 @@ const BookingTracking = () => {
 
           <div className="grid gap-4 lg:grid-cols-2">
 
-            {filteredHistory.map((item) => (
+            {historyError && (
+              <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 lg:col-span-2">
+                {historyError}
+              </p>
+            )}
+            {isLoadingHistory && (
+              <p className="rounded-xl bg-white p-4 text-sm text-[#6F5E52] lg:col-span-2">
+                Loading reservation history...
+              </p>
+            )}
+            {!isLoadingHistory && !historyError && filteredHistory.length === 0 && (
+              <p className="rounded-xl bg-white p-4 text-sm text-[#6F5E52] lg:col-span-2">
+                {historyMobile
+                  ? "No reservations found for this mobile number."
+                  : "Enter the mobile number used for your reservation to see its status and history."}
+              </p>
+            )}
+
+            {!isLoadingHistory && filteredHistory.map((item) => (
               <HistoryCard
                 key={item.id}
                 item={item}
                 onTrack={() =>
-                  navigate(
-                    "/bookings/tracking",
-                    {
-                      state: bookingData,
-                    }
-                  )
+                  navigate("/bookings/tracking", {
+                    state: item.record,
+                  })
                 }
                 onBookAgain={() =>
                   navigate("/bookings")
@@ -953,14 +1206,10 @@ const BookingTracking = () => {
 
             <p className="font-serif text-[18px] text-espresso">
               Uncle&apos;s Coffee
-              <span className="ml-2 font-sans text-[10px] text-[#806F61]">
-                — Artisanal roastery & slow bar.
-              </span>
             </p>
 
             <p className="mt-2 text-[10px] text-[#6F5D50]">
-              Table-side service • Reservations •
-              Contact • Privacy • Terms
+              Reservation information and status updates for your booking.
             </p>
 
           </div>
@@ -980,7 +1229,9 @@ const BookingTracking = () => {
             "
           >
             <span className="h-2 w-2 rounded-full bg-caramel" />
-            Service Live • Table 12 Active
+            {bookingId
+              ? `Reservation ${displayBookingId} • ${currentStatusLabel}`
+              : "Reservation tracking"}
           </div>
 
         </div>
@@ -1005,10 +1256,30 @@ const BookingTracking = () => {
                   {t.bookingTracking.cancelTitle}
                 </h2>
                 <p className="mt-2 text-[11px] leading-5 text-[#67564A]">
-                  Your reservation for Table {reservation.table?.id || 12} will be cancelled and the table will be released.
+                  {tableLabel
+                    ? `Your reservation for ${tableLabel} will be cancelled and the table will be released.`
+                    : "Your reservation will be cancelled and the table will be released."}
                 </p>
               </div>
             </div>
+
+            <label className="mt-5 block">
+              <span className="mb-2 block text-[10px] font-medium text-espresso">
+                Cancellation reason
+              </span>
+              <textarea
+                rows={3}
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                className="w-full resize-none rounded-xl border border-[#E8DED0] bg-[#F6F1E9] p-3 text-[11px] text-espresso outline-none focus:border-caramel"
+              />
+            </label>
+
+            {historyError && (
+              <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-[10px] text-red-800">
+                {historyError}
+              </p>
+            )}
 
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
@@ -1021,9 +1292,10 @@ const BookingTracking = () => {
               <button
                 type="button"
                 onClick={handleCancel}
+                disabled={isCancelling || !cancelReason.trim()}
                 className="rounded-full bg-error px-5 py-3 text-[10px] font-semibold text-white transition hover:opacity-90"
               >
-                {t.bookingTracking.yesCancel}
+                {isCancelling ? "Cancelling..." : t.bookingTracking.yesCancel}
               </button>
             </div>
           </div>
@@ -1249,10 +1521,13 @@ const HistoryCard = ({
             }
           `}
         >
-          {item.statusType ===
-          "upcoming"
+          {item.statusType === "upcoming"
             ? "▱"
-            : "✓"}
+            : item.statusType === "completed"
+              ? "✓"
+              : item.statusType === "cancelled"
+                ? "×"
+                : "—"}
         </div>
 
         {/* Main */}
@@ -1266,7 +1541,7 @@ const HistoryCard = ({
               <div className="flex items-center gap-2">
 
                 <h3 className="font-serif text-[17px] text-espresso">
-                  {item.id}
+                  #{String(item.id).replace(/^#/, "")}
                 </h3>
 
                 <span
@@ -1343,8 +1618,7 @@ const HistoryCard = ({
           ◷ {item.description}
         </p>
 
-        {item.statusType ===
-        "upcoming" ? (
+        {item.statusType === "upcoming" ? (
           <button
             type="button"
             onClick={onTrack}
@@ -1358,7 +1632,7 @@ const HistoryCard = ({
           >
             View Tracking →
           </button>
-        ) : (
+        ) : ["completed", "cancelled"].includes(item.statusType) ? (
           <button
             type="button"
             onClick={onBookAgain}
@@ -1376,7 +1650,7 @@ const HistoryCard = ({
           >
             ↻ Book Again
           </button>
-        )}
+        ) : null}
 
       </div>
 
@@ -1425,7 +1699,7 @@ const formatTime = (value) => {
 
 
 const formatPhone = (value) => {
-  if (!value) return "98765 43210";
+  if (!value) return "—";
 
   const numbers = value
     .toString()
@@ -1439,6 +1713,16 @@ const formatPhone = (value) => {
   }
 
   return value;
+};
+
+const formatDateTime = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleTimeString("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 };
 
 

@@ -1,206 +1,43 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import Navbar from "../components/Navbar";
 import FoodDetailModal from "../components/FoodDetailModal";
 import { useLanguage } from "../context/LanguageContext";
+import {
+  readStoredValue,
+  requestJson,
+  writeStoredValue,
+} from "../services/orderApi";
 
-/* =========================================================
-   MENU DATA
-========================================================= */
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "");
 
-const menuData = [
-  {
-    category: "Artisanal Coffee & Brews",
-    description: "Craft roasted in small batches",
+const getCategoryLabel = (category = "") => {
+  const labels = {
+    "cold-brew": "Cold Brews & Teas",
+    "artisanal-coffee": "Artisanal Coffee",
+    "sourdough-kitchen-plates": "Sourdough & Mains",
+    "bakehouse-desserts": "Bakehouse & Desserts",
+  };
+  const normalizedCategory = category.toLowerCase();
 
-    items: [
-      {
-        id: 1,
-        name: "Cappuccino",
-        price: 180,
-        description:
-          "Rich double espresso shot with silky microfoam milk, finished with light organic Ceylon cinnamon dust.",
-        meta: "Hot · 220ml",
-        badge: "POPULAR",
-        image:
-          "https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=800&q=85",
-        veg: true,
-      },
+  return (
+    labels[normalizedCategory] ||
+    normalizedCategory
+      .split(/[-_]/)
+      .filter(Boolean)
+      .map((word) => word[0].toUpperCase() + word.slice(1))
+      .join(" ")
+  );
+};
 
-      {
-        id: 2,
-        name: "Café Latte",
-        price: 190,
-        description:
-          "Double shot espresso folded gently into velvety textured whole milk. Gentle sweetness with nutty undertones.",
-        meta: "Hot / Iced · 280ml",
-        veg: true,
-      },
-
-      {
-        id: 3,
-        name: "Long Black / Americano",
-        price: 150,
-        description:
-          "Clean dial-origin extraction over hot filtered mineral water, preserving the delicate, intact golden crema.",
-        meta: "Black · 200ml",
-        veg: true,
-      },
-
-      {
-        id: 4,
-        name: "Cold Brew Tonic",
-        price: 210,
-        description:
-          "18-hour slow steeped single origin coffee, botanical citrus zest infusion, finished with crisp sparkling Indian tonic water.",
-        meta: "Chilled · 300ml",
-        badge: "CHEF SELECTION",
-        veg: true,
-      },
-
-      {
-        id: 5,
-        name: "Mocha Velvet",
-        price: 220,
-        description:
-          "Single-origin espresso melted into 70% dark single-estate Belgian chocolate, steamed organic whole milk and shaved cacao.",
-        meta: "Decaf · 240ml",
-        veg: true,
-      },
-
-      {
-        id: 6,
-        name: "Custom Pour",
-        price: 240,
-        description:
-          "We craft house-made oat milk and California almond milk upon request. Mention it to your barista in table special requests.",
-        meta: "+₹40 for plant milk",
-        badge: "MILK ALTERNATIVES",
-        special: true,
-        veg: true,
-      },
-    ],
-  },
-
-  {
-    category: "Sourdough & Kitchen Plates",
-    description: "Baked fresh every morning",
-
-    items: [
-      {
-        id: 7,
-        name: "Veg Grilled Sandwich",
-        price: 220,
-        description:
-          "Farm fresh seasonal vegetables, mature aged cheddar, aromatic herbs and vegetables on toasted wild yeast sourdough.",
-        meta: "Served with house dip",
-        badge: "CHEF SELECTION",
-        veg: true,
-        image:
-          "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=800&q=85",
-      },
-
-      {
-        id: 8,
-        name: "Sourdough Avocado Tartine",
-        price: 260,
-        description:
-          "Crushed Hass avocado, toasted Aleppo chili flakes, Danish feta crumbles, pickled watermelon radish and lemon olive drizzle.",
-        meta: "Open Tartine · Artisan",
-        veg: true,
-      },
-
-      {
-        id: 9,
-        name: "Hand-cut Herb Fries",
-        price: 160,
-        description:
-          "Crisp mountain potato fries tossed with fresh rosemary salt and thyme, served alongside roasted garlic black pepper aioli.",
-        meta: "Sharing Portion",
-        badge: "BEST SELLER",
-        veg: true,
-      },
-
-      {
-        id: 10,
-        name: "Truffle Mushroom Melt",
-        price: 280,
-        description:
-          "Pan-roasted wild and shiitake mushrooms, gruyère cheese melt and black truffle oil on toasted house-baked brioche.",
-        meta: "Gourmet Sandwich",
-        veg: true,
-      },
-    ],
-  },
-
-  {
-    category: "Bakehouse & Desserts",
-    description: "Handcrafted sweet treats",
-
-    items: [
-      {
-        id: 11,
-        name: "Sea Salt Chocolate Brownie",
-        price: 180,
-        description:
-          "Fudgy dark chocolate brownie with crackly top, finished with Maldon sea salt flakes and raw cacao dusting.",
-        meta: "Warm bake · Gluten option",
-        badge: "POPULAR",
-        image:
-          "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=800&q=85",
-        veg: true,
-      },
-
-      {
-        id: 12,
-        name: "Classic Tiramisu Cup",
-        price: 240,
-        description:
-          "Savoiardi ladyfingers soaked in our fresh house espresso roast, layered with whipped mascarpone cream and Valrhona cocoa.",
-        meta: "Chilled cup",
-        veg: true,
-      },
-
-      {
-        id: 13,
-        name: "Warm Almond Croissant",
-        price: 190,
-        description:
-          "Twice-baked butter croissant filled with fragrant vanilla bean frangipane, topped with toasted sliced almonds and powdered sugar.",
-        meta: "Freshly Toasted",
-        veg: true,
-      },
-    ],
-  },
-];
-
-/* =========================================================
-   CATEGORIES
-========================================================= */
-
-const categories = [
-  {
-    name: "All",
-    count: 27,
-  },
-  {
-    name: "Artisanal Coffee",
-    count: 12,
-  },
-  {
-    name: "Sourdough & Mains",
-    count: 9,
-  },
-  {
-    name: "Bakehouse & Desserts",
-    count: 6,
-  },
-  {
-    name: "Cold Brews & Teas",
-    count: 7,
-  },
-];
+const getExtrasTotal = (item, selectedExtras = []) =>
+  (item.options?.extras || []).reduce((total, extra) => {
+    const extraId = extra.id || extra._id || extra.name;
+    return total + (
+      selectedExtras.includes(extraId) ? Number(extra.price) || 0 : 0
+    );
+  }, 0);
 
 /* =========================================================
    MENU PAGE
@@ -209,27 +46,223 @@ const categories = [
 const Menu = () => {
   const { t } = useLanguage();
   const [activeCategory, setActiveCategory] = useState("All");
-
   const [search, setSearch] = useState("");
-
   const [vegOnly, setVegOnly] = useState(false);
-
-  const [selectedItem, setSelectedItem] = useState(null);
-
-  const [selectedMilk, setSelectedMilk] = useState("regular");
-
-  const [selectedTemperature, setSelectedTemperature] =
-    useState("hot");
-
-  const [itemQuantity, setItemQuantity] = useState(1);
-
-  const [itemNote, setItemNote] = useState("");
-
-  const [cart, setCart] = useState({
-    1: 1,
-    7: 1,
-    11: 1,
+  const [menuItems, setMenuItems] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [orderSetup, setOrderSetup] = useState({
+    loading: true,
+    canSelectItems: false,
+    message: "",
   });
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedMilk, setSelectedMilk] = useState("Regular");
+  const [selectedTemperature, setSelectedTemperature] = useState("Hot");
+  const [selectedExtras, setSelectedExtras] = useState([]);
+  const [itemQuantity, setItemQuantity] = useState(1);
+  const [itemNote, setItemNote] = useState("");
+  const [savedCart, setSavedCart] = useState(() =>
+    readStoredValue("uncleCoffeeCart", {})
+  );
+  const [cart, setCart] = useState(() =>
+    Object.fromEntries(
+      Object.entries(readStoredValue("uncleCoffeeCart", {})).map(
+        ([id, item]) => [id, item.quantity]
+      )
+    )
+  );
+  const [cartExtras, setCartExtras] = useState(() =>
+    Object.fromEntries(
+      Object.entries(readStoredValue("uncleCoffeeCart", {})).map(
+        ([id, item]) => [
+          id,
+          (item.options?.extras || []).map((extra) => extra.id || extra._id || extra.name),
+        ]
+      )
+    )
+  );
+
+  useEffect(() => {
+    writeStoredValue("uncleCoffeeCart", savedCart);
+  }, [savedCart]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const validateOrderSetup = async () => {
+      const dineIn = readStoredValue("uncleCoffeeDineIn", {});
+      const tableCode = dineIn.tableCode || dineIn.enteredTable || "";
+      const guestCount = Number(dineIn.guestCount);
+      const customer = dineIn.customer || {};
+      const hasCartOrder = Boolean(
+        localStorage.getItem("uncleCoffeeCartOrderId")
+      );
+      const hasRequiredDetails =
+        tableCode &&
+        String(customer.name || "").trim() &&
+        String(customer.mobile || "").replace(/\D/g, "").length >= 10 &&
+        Number.isInteger(guestCount) &&
+        guestCount >= 1;
+
+      if (!hasRequiredDetails || !hasCartOrder) {
+        setOrderSetup({
+          loading: false,
+          canSelectItems: false,
+          message:
+            "Choose an available table and enter your name, mobile number, and guest count before selecting menu items.",
+        });
+        return;
+      }
+
+      try {
+        const result = await requestJson("/api/tables/all", {
+          signal: controller.signal,
+        });
+        if (!Array.isArray(result.tables)) {
+          throw new Error("The tables API returned an invalid response.");
+        }
+
+        const selectedTable = result.tables.find(
+          (table) =>
+            table.isActive === true && table.tableCode === tableCode
+        );
+        if (!selectedTable) {
+          setOrderSetup({
+            loading: false,
+            canSelectItems: false,
+            message:
+              "Your selected table is no longer available. Return to Welcome and choose another table.",
+          });
+          return;
+        }
+        if (selectedTable.capacity && guestCount > selectedTable.capacity) {
+          setOrderSetup({
+            loading: false,
+            canSelectItems: false,
+            message:
+              "The guest count exceeds this table's capacity. Return to Welcome and update your details.",
+          });
+          return;
+        }
+
+        setOrderSetup({
+          loading: false,
+          canSelectItems: true,
+          message: "",
+        });
+      } catch (requestError) {
+        if (requestError.name !== "AbortError") {
+          setOrderSetup({
+            loading: false,
+            canSelectItems: false,
+            message:
+              requestError.message ||
+              "Unable to verify your table. Return to Welcome and try again.",
+          });
+        }
+      }
+    };
+
+    validateOrderSetup();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!API_BASE_URL) {
+      setError("VITE_API_BASE_URL is not configured.");
+      setIsLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsLoading(true);
+      setError("");
+
+      const endpoint = new URL(`${API_BASE_URL}/api/menu`);
+      endpoint.searchParams.set("available", "true");
+      if (activeCategory !== "All") {
+        endpoint.searchParams.set("category", activeCategory);
+      }
+      if (search.trim()) {
+        endpoint.searchParams.set("search", search.trim());
+      }
+
+      try {
+        const response = await fetch(endpoint, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Menu request failed (${response.status}).`);
+        }
+
+        const result = await response.json();
+        if (!result.success || !Array.isArray(result.items)) {
+          throw new Error("The menu API returned an invalid response.");
+        }
+
+        const items = result.items.map((item) => {
+          const image = item.imageUrl || item.image;
+          const imageUrl = item.imageFileId
+            ? `${API_BASE_URL}/api/menu/file/${encodeURIComponent(item.imageFileId)}`
+            : image
+              ? new URL(image, API_BASE_URL).toString()
+              : "";
+          const price = Number(item.SellingPrice ?? item.price ?? 0);
+          const cutoffPrice = Number(item.CutoffPrice ?? item.cutoffPrice ?? 0);
+
+          return {
+            ...item,
+            id: item.id || item._id,
+            price,
+            cutoffPrice,
+            discountPercentage: Number(
+              item.PercentageOff ??
+                item.percentageOff ??
+                (cutoffPrice > price
+                  ? Math.round(((cutoffPrice - price) / cutoffPrice) * 100)
+                  : 0)
+            ),
+            image: imageUrl,
+            badge: Array.isArray(item.badges)
+              ? item.badges.join(" · ")
+              : item.badge,
+            category: item.category || "other",
+            meta: item.meta || getCategoryLabel(item.category || "other"),
+          };
+        });
+
+        setMenuItems(items);
+        setCategoryOptions((previous) => {
+          const categories = new Map(
+            previous.map((category) => [category.value, category])
+          );
+          items.forEach((item) => {
+            categories.set(item.category, {
+              value: item.category,
+              label: getCategoryLabel(item.category),
+            });
+          });
+          return Array.from(categories.values());
+        });
+      } catch (requestError) {
+        if (requestError.name !== "AbortError") {
+          setError(requestError.message || "Unable to load the menu.");
+          setMenuItems([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    }, search.trim() ? 300 : 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [activeCategory, search]);
 
   /* =========================================================
      CART COUNT
@@ -239,6 +272,11 @@ const Menu = () => {
     (total, quantity) => total + quantity,
     0
   );
+  const cartSummary = Object.entries(cart)
+    .filter(([, quantity]) => quantity > 0)
+    .map(([id]) => menuItems.find((item) => String(item.id) === id)?.name)
+    .filter(Boolean)
+    .join(", ");
 
   /* =========================================================
      CART TOTAL
@@ -246,12 +284,13 @@ const Menu = () => {
 
   const cartTotal = Object.entries(cart).reduce(
     (total, [id, quantity]) => {
-
-      const item = menuData
-        .flatMap((section) => section.items)
-        .find((menuItem) => menuItem.id === Number(id));
-
-      return total + (item?.price || 0) * quantity;
+      const item = menuItems.find(
+        (menuItem) => String(menuItem.id) === id
+      );
+      if (!item) return total;
+      return total + (
+        item.price + getExtrasTotal(item, cartExtras[id])
+      ) * quantity;
     },
 
     0
@@ -262,6 +301,16 @@ const Menu = () => {
   ========================================================= */
 
   const updateCart = (item, amount) => {
+    if (!orderSetup.canSelectItems) return;
+
+    if ((cart[item.id] || 0) + amount <= 0) {
+      setCartExtras((previousExtras) => {
+        const updatedExtras = { ...previousExtras };
+        delete updatedExtras[item.id];
+        return updatedExtras;
+      });
+    }
+
     setCart((previous) => {
 
       const currentQuantity =
@@ -285,6 +334,39 @@ const Menu = () => {
         [item.id]: newQuantity,
       };
     });
+
+    setSavedCart((previous) => {
+      const currentItem = previous[item.id];
+      const newQuantity = (currentItem?.quantity || 0) + amount;
+      if (newQuantity <= 0) {
+        const updated = { ...previous };
+        delete updated[item.id];
+        return updated;
+      }
+      return {
+        ...previous,
+        [item.id]: {
+          ...(currentItem || {
+            id: item.id,
+            menuItemId: item.id,
+            name: item.name,
+            price: item.price,
+            image: item.image,
+            options: {
+              ...(item.options?.milk?.length
+                ? { milk: item.options.milk[0] }
+                : {}),
+              ...(item.options?.temperature?.length
+                ? { temperature: item.options.temperature[0] }
+                : {}),
+              extras: [],
+            },
+            note: "",
+          }),
+          quantity: newQuantity,
+        },
+      };
+    });
   };
 
   /* =========================================================
@@ -292,16 +374,13 @@ const Menu = () => {
   ========================================================= */
 
   const openItemModal = (item) => {
+    if (!orderSetup.canSelectItems) return;
+
     setSelectedItem(item);
-
-    setSelectedMilk("regular");
-
-    setSelectedTemperature("hot");
-
-    setItemQuantity(
-      cart[item.id] || 1
-    );
-
+    setSelectedMilk(item.options?.milk?.[0] || "Regular");
+    setSelectedTemperature(item.options?.temperature?.[0] || "Hot");
+    setSelectedExtras(cartExtras[item.id] || []);
+    setItemQuantity(cart[item.id] || 1);
     setItemNote("");
   };
 
@@ -314,27 +393,11 @@ const Menu = () => {
   };
 
   /* =========================================================
-     MILK PRICE
-  ========================================================= */
-
-  const getMilkPrice = () => {
-
-    if (
-      selectedMilk === "oat" ||
-      selectedMilk === "almond"
-    ) {
-      return 30;
-    }
-
-    return 0;
-  };
-
-  /* =========================================================
      MODAL TOTAL
   ========================================================= */
 
   const modalTotal = selectedItem
-    ? (selectedItem.price + getMilkPrice()) *
+    ? (selectedItem.price + getExtrasTotal(selectedItem, selectedExtras)) *
       itemQuantity
     : 0;
 
@@ -344,11 +407,45 @@ const Menu = () => {
 
   const handleAddToCartFromModal = () => {
 
+    if (!orderSetup.canSelectItems) return;
     if (!selectedItem) return;
+
+    const options = {};
+    if (selectedItem.options?.milk?.length) {
+      options.milk = selectedMilk;
+    }
+    if (selectedItem.options?.temperature?.length) {
+      options.temperature = selectedTemperature;
+    }
+    const extras = (selectedItem.options?.extras || [])
+      .filter((extra) =>
+        selectedExtras.includes(extra.id || extra._id || extra.name)
+      )
+      .map(({ name, price }) => ({ name, price: Number(price) || 0 }));
+    if (extras.length) options.extras = extras;
 
     setCart((previous) => ({
       ...previous,
       [selectedItem.id]: itemQuantity,
+    }));
+    setCartExtras((previous) => ({
+      ...previous,
+      [selectedItem.id]: selectedExtras,
+    }));
+    setSavedCart((previous) => ({
+      ...previous,
+      [selectedItem.id]: {
+        id: selectedItem.id,
+        menuItemId: selectedItem.id,
+        name: selectedItem.name,
+        price: selectedItem.price,
+        image: selectedItem.image,
+        badge: selectedItem.badge,
+        meta: selectedItem.meta,
+        quantity: itemQuantity,
+        options,
+        note: itemNote.trim(),
+      },
     }));
 
     closeItemModal();
@@ -359,60 +456,27 @@ const Menu = () => {
   ========================================================= */
 
   const filteredSections = useMemo(() => {
-
-    return menuData
-
-      .map((section) => {
-
-        const filteredItems =
-          section.items.filter((item) => {
-
-            const searchText =
-              search.toLowerCase().trim();
-
-            const matchesSearch =
-              !searchText ||
-              item.name
-                .toLowerCase()
-                .includes(searchText) ||
-              item.description
-                .toLowerCase()
-                .includes(searchText);
-
-            const matchesVeg =
-              vegOnly ? item.veg : true;
-
-            const matchesCategory =
-              activeCategory === "All" ||
-              section.category
-                .toLowerCase()
-                .includes(
-                  activeCategory.toLowerCase()
-                );
-
-            return (
-              matchesSearch &&
-              matchesVeg &&
-              matchesCategory
-            );
+    const sections = new Map();
+    menuItems
+      .filter((item) =>
+        vegOnly
+          ? item.veg === true || item.isVeg === true ||
+            (item.veg === undefined && item.isVeg === undefined)
+          : true
+      )
+      .forEach((item) => {
+        if (!sections.has(item.category)) {
+          sections.set(item.category, {
+            category: getCategoryLabel(item.category),
+            description: item.categoryDescription || "",
+            items: [],
           });
+        }
+        sections.get(item.category).items.push(item);
+      });
 
-        return {
-          ...section,
-          items: filteredItems,
-        };
-      })
-
-      .filter(
-        (section) =>
-          section.items.length > 0
-      );
-
-  }, [
-    search,
-    vegOnly,
-    activeCategory,
-  ]);
+    return Array.from(sections.values());
+  }, [menuItems, vegOnly]);
 
   return (
     <div className="min-h-screen bg-cream text-espresso">
@@ -447,61 +511,26 @@ const Menu = () => {
 
           </div>
 
-          {/* =================================================
-              ROASTER SPOTLIGHT
-          ================================================= */}
-
-          <div className="mt-5 flex flex-col gap-3 rounded-xl bg-[#F0ECE5] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-
-            <div className="flex items-start gap-3">
-
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-caramel text-cream">
-                ☕
-              </div>
-
-              <div>
-
-                <div className="flex flex-wrap items-center gap-2">
-
-                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-caramel">
-                    Roaster&apos;s Spotlight
-                  </span>
-
-                  <span className="text-[10px] text-[#A69787]">
-                    •
-                  </span>
-
-                  <span className="text-xs font-medium text-espresso">
-                    Ethiopia Yirgacheffe
-                  </span>
-
-                </div>
-
-                <p className="text-[10px] text-[#715E50]">
-                  Notes of bergamot blossom, Meyer lemon
-                  & wild forest honey
-                </p>
-
-              </div>
-
+          {!orderSetup.canSelectItems && (
+            <div
+              role={orderSetup.loading ? "status" : "alert"}
+              className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#E8DED0] bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="text-sm leading-5 text-[#624B3D]">
+                {orderSetup.loading
+                  ? "Verifying your table and order details…"
+                  : orderSetup.message}
+              </p>
+              {!orderSetup.loading && (
+                <Link
+                  to="/"
+                  className="shrink-0 rounded-full bg-caramel px-4 py-2.5 text-center text-xs font-semibold text-cream transition hover:bg-caramelHover"
+                >
+                  Complete details
+                </Link>
+              )}
             </div>
-
-            <div className="flex items-center justify-between gap-3 sm:justify-end">
-
-              <span className="font-serif text-sm text-caramel">
-                ₹210
-              </span>
-
-              <button
-                type="button"
-                className="rounded-full bg-caramel px-4 py-2 text-[10px] font-semibold text-cream transition hover:bg-caramelHover"
-              >
-                + Add
-              </button>
-
-            </div>
-
-          </div>
+          )}
 
           {/* =================================================
               SEARCH + FILTER
@@ -559,7 +588,7 @@ const Menu = () => {
                 ▱
               </span>
 
-              Table 12
+              Dine-in service
             </div>
 
           </div>
@@ -572,42 +601,26 @@ const Menu = () => {
 
             <div className="flex min-w-max gap-2">
 
-              {categories.map((category) => {
-
-                const isActive =
-                  activeCategory === category.name;
+              {[
+                { value: "All", label: t.menu.all },
+                ...categoryOptions,
+              ].map((category) => {
+                const isActive = activeCategory === category.value;
 
                 return (
                   <button
-                    key={category.name}
+                    key={category.value}
                     type="button"
-                    onClick={() =>
-                      setActiveCategory(
-                        category.name
-                      )
-                    }
+                    onClick={() => setActiveCategory(category.value)}
                     className={`rounded-full px-4 py-2 text-[10px] font-medium transition ${
                       isActive
                         ? "bg-caramel text-cream"
                         : "bg-[#F0ECE5] text-[#624B3D] hover:bg-latte"
                     }`}
                   >
-                    {category.name === "All"
-                      ? t.menu.all
-                      : category.name}
-
-                    <span
-                      className={`ml-1 ${
-                        isActive
-                          ? "text-[#F6DCCB]"
-                          : "text-[#9D8C7E]"
-                      }`}
-                    >
-                      {category.count}
-                    </span>
+                    {category.label}
                   </button>
                 );
-
               })}
 
             </div>
@@ -618,6 +631,12 @@ const Menu = () => {
               MENU SECTIONS
           ================================================= */}
 
+          {error && (
+            <p role="alert" className="mt-8 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+              {error}
+            </p>
+          )}
+
           <div className="mt-8 space-y-6 sm:space-y-10">
 
             {filteredSections.map(
@@ -626,6 +645,7 @@ const Menu = () => {
                   key={section.category}
                   section={section}
                   cart={cart}
+                  canSelectItems={orderSetup.canSelectItems}
                   updateCart={updateCart}
                   openItemModal={
                     openItemModal
@@ -648,49 +668,31 @@ const Menu = () => {
               </div>
 
               <h2 className="mt-4 font-serif text-2xl">
-                Nothing on the menu
+                {isLoading ? "Loading menu…" : "Nothing on the menu"}
               </h2>
 
               <p className="mt-2 text-sm text-[#715E50]">
-                Try another search or category.
+                {isLoading
+                  ? "Please wait while we fetch today’s menu."
+                  : "Try another search or category."}
               </p>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch("");
-                  setVegOnly(false);
-                  setActiveCategory("All");
-                }}
-                className="mt-5 rounded-full bg-caramel px-5 py-2.5 text-xs font-semibold text-cream"
-              >
-                {t.menu.all} Items
-              </button>
+              {!isLoading && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setVegOnly(false);
+                    setActiveCategory("All");
+                  }}
+                  className="mt-5 rounded-full bg-caramel px-5 py-2.5 text-xs font-semibold text-cream"
+                >
+                  {t.menu.all} Items
+                </button>
+              )}
 
             </div>
           )}
-
-          {/* =================================================
-              INGREDIENT MESSAGE
-          ================================================= */}
-
-          <div className="mt-10 rounded-2xl bg-[#F1ECE3] px-6 py-8 text-center sm:px-10">
-
-            <div className="text-lg text-caramel">
-              ♧
-            </div>
-
-            <h2 className="mt-2 font-serif text-xl text-espresso">
-              Purity of Ingredients
-            </h2>
-
-            <p className="mx-auto mt-2 max-w-[520px] text-xs leading-5 text-[#715E50]">
-              We source beans directly from micro-lot estates
-              in Chikmagalur and Yirgacheffe. Our bread is
-              fermented for 36 hours using natural levain.
-            </p>
-
-          </div>
 
         </section>
 
@@ -700,7 +702,7 @@ const Menu = () => {
           FLOATING CART
       ===================================================== */}
 
-      {cartItemsCount > 0 && (
+      {orderSetup.canSelectItems && cartItemsCount > 0 && (
         <div className="fixed bottom-20 left-1/2 z-40 w-[calc(100%-24px)] max-w-[460px] -translate-x-1/2 sm:left-auto sm:right-8 sm:translate-x-0 lg:bottom-4">
 
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#91431F] p-2 pl-3 text-cream shadow-[0_12px_30px_rgba(61,35,20,0.25)]">
@@ -714,11 +716,11 @@ const Menu = () => {
               <div className="min-w-0">
 
                 <p className="text-[9px] font-semibold">
-                  Table 12 Active · ₹{cartTotal}
+                  Cart total · ₹{cartTotal}
                 </p>
 
                 <p className="truncate text-[9px] text-[#F0DCD0]">
-                  Cappuccino, Veg Sandwich, Brownie
+                  {cartSummary || "Your selected menu items"}
                 </p>
 
               </div>
@@ -749,6 +751,8 @@ const Menu = () => {
           setQuantity={setItemQuantity}
           selectedMilk={selectedMilk}
           setSelectedMilk={setSelectedMilk}
+          selectedExtras={selectedExtras}
+          setSelectedExtras={setSelectedExtras}
           selectedTemperature={
             selectedTemperature
           }
@@ -785,7 +789,7 @@ const Menu = () => {
             </span>
 
             <span className="font-medium text-caramel">
-              Table 12 Active
+              Table-side ordering service
             </span>
 
           </div>
@@ -805,6 +809,7 @@ const Menu = () => {
 const MenuSection = ({
   section,
   cart,
+  canSelectItems,
   updateCart,
   openItemModal,
 }) => {
@@ -838,6 +843,7 @@ const MenuSection = ({
             key={item.id}
             item={item}
             quantity={cart[item.id] || 0}
+            canSelectItems={canSelectItems}
             updateCart={updateCart}
             openItemModal={openItemModal}
           />
@@ -856,6 +862,7 @@ const MenuSection = ({
 const MenuCard = ({
   item,
   quantity,
+  canSelectItems,
   updateCart,
   openItemModal,
 }) => {
@@ -866,7 +873,12 @@ const MenuCard = ({
       onClick={() =>
         openItemModal(item)
       }
-      className={`group relative cursor-pointer overflow-hidden rounded-xl border border-[#EFE8DE] bg-white transition hover:-translate-y-0.5 hover:border-[#E4D8CA] hover:shadow-[0_8px_20px_rgba(61,35,20,0.07)] ${
+      aria-disabled={!canSelectItems}
+      className={`group relative overflow-hidden rounded-2xl border border-[#EFE8DE] bg-white transition duration-300 ${
+        canSelectItems
+          ? "cursor-pointer hover:-translate-y-1 hover:border-[#E4D8CA] hover:shadow-[0_14px_30px_rgba(61,35,20,0.10)]"
+          : "cursor-not-allowed opacity-75"
+      } ${
         item.special
           ? "bg-[#F4EEE6]"
           : ""
@@ -875,17 +887,23 @@ const MenuCard = ({
 
       {/* Image */}
       {item.image && (
-        <div className="relative h-[210px] overflow-hidden">
+        <div className="relative h-[190px] overflow-hidden">
 
           <img
             src={item.image}
             alt={item.name}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
 
           {item.badge && (
-            <span className="absolute left-3 top-3 rounded-full bg-[#91431F] px-2.5 py-1 text-[8px] font-bold tracking-[0.08em] text-cream">
+            <span className="absolute left-3 top-3 max-w-[70%] truncate rounded-full bg-white/95 px-3 py-1.5 text-[9px] font-bold tracking-[0.04em] text-espresso shadow-sm backdrop-blur">
               {item.badge}
+            </span>
+          )}
+
+          {item.discountPercentage > 0 && (
+            <span className="absolute right-3 top-3 rounded-full bg-[#91431F] px-3 py-1.5 text-[10px] font-bold text-white shadow-sm">
+              {item.discountPercentage}% OFF
             </span>
           )}
 
@@ -899,13 +917,13 @@ const MenuCard = ({
       )}
 
       {/* Content */}
-      <div className="flex min-h-[225px] flex-col p-3">
+      <div className="flex min-h-[190px] flex-col p-4">
 
         <div className="flex items-start justify-between gap-3">
 
           <div>
 
-            <h3 className="font-serif text-[17px] leading-tight text-espresso">
+            <h3 className="font-serif text-[18px] leading-tight text-espresso">
               {item.name}
             </h3>
 
@@ -917,21 +935,33 @@ const MenuCard = ({
 
           </div>
 
-          <span className="shrink-0 font-serif text-sm text-caramel">
-            ₹{item.price}
-          </span>
+          <div className="shrink-0 text-right">
+            <p className="font-serif text-base font-semibold text-caramel">
+              ₹{item.price}
+            </p>
+            {item.cutoffPrice > item.price && (
+              <p className="text-[10px] text-[#9D8C7E] line-through">
+                ₹{item.cutoffPrice}
+              </p>
+            )}
+            {!item.image && item.discountPercentage > 0 && (
+              <p className="mt-1 text-[9px] font-bold text-[#91431F]">
+                {item.discountPercentage}% OFF
+              </p>
+            )}
+          </div>
 
         </div>
 
         {/* Description */}
-        <p className="mt-2 text-[10px] leading-[1.55] text-[#715E50]">
+        <p className="mt-2 min-h-8 overflow-hidden text-[11px] leading-4 text-[#715E50]">
           {item.description}
         </p>
 
         {/* Bottom */}
         <div className="mt-auto flex items-end justify-between gap-3 pt-5">
 
-          <span className="text-[8px] tracking-[0.04em] text-[#806F61]">
+          <span className="text-[9px] font-medium tracking-[0.04em] text-[#806F61]">
             {item.meta}
           </span>
 
@@ -943,6 +973,7 @@ const MenuCard = ({
                 event.stopPropagation();
                 updateCart(item, -1);
               }}
+              disabled={!canSelectItems}
               onIncrease={(event) => {
                 event.stopPropagation();
                 updateCart(item, 1);
@@ -957,7 +988,8 @@ const MenuCard = ({
                 event.stopPropagation();
                 updateCart(item, 1);
               }}
-              className="flex items-center gap-1.5 rounded-full bg-[#F0ECE5] px-4 py-2 text-[9px] font-semibold text-espresso transition hover:bg-caramel hover:text-cream"
+              disabled={!canSelectItems}
+              className="flex items-center gap-1.5 rounded-full bg-caramel px-4 py-2.5 text-[10px] font-semibold text-cream transition hover:bg-caramelHover disabled:cursor-not-allowed disabled:opacity-50"
             >
               + {t.menu.add}
             </button>
@@ -989,6 +1021,7 @@ const QuantityControl = ({
   quantity,
   onDecrease,
   onIncrease,
+  disabled,
 }) => {
 
   return (
@@ -1003,7 +1036,8 @@ const QuantityControl = ({
         type="button"
         onClick={onDecrease}
         aria-label="Decrease quantity"
-        className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs text-espresso transition hover:bg-latte"
+        disabled={disabled}
+        className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs text-espresso transition hover:bg-latte disabled:cursor-not-allowed disabled:opacity-50"
       >
         −
       </button>
@@ -1016,7 +1050,8 @@ const QuantityControl = ({
         type="button"
         onClick={onIncrease}
         aria-label="Increase quantity"
-        className="flex h-6 w-6 items-center justify-center rounded-full bg-caramel text-xs text-cream transition hover:bg-caramelHover"
+        disabled={disabled}
+        className="flex h-6 w-6 items-center justify-center rounded-full bg-caramel text-xs text-cream transition hover:bg-caramelHover disabled:cursor-not-allowed disabled:opacity-50"
       >
         +
       </button>

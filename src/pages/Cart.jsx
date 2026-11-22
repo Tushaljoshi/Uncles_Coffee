@@ -1,46 +1,44 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useLanguage } from "../context/LanguageContext";
+import {
+  getOrderRouteId,
+  readStoredValue,
+  requestJson,
+  writeStoredValue,
+} from "../services/orderApi";
 
-/* =========================================================
-   DEMO CART DATA
-   ========================================================= */
+const loadRazorpay = () =>
+  new Promise((resolve, reject) => {
+    if (window.Razorpay) {
+      resolve();
+      return;
+    }
 
-const initialCartItems = [
-  {
-    id: 1,
-    name: "Cappuccino",
-    price: 180,
-    quantity: 2,
-    image:
-      "https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=500&q=85",
-    customization: "Extra Hot • Regular Whole Milk",
-    note: 'Note: "Less sugar"',
-  },
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load Razorpay checkout."));
+    document.body.appendChild(script);
+  });
 
-  {
-    id: 7,
-    name: "Veg Grilled Sandwich",
-    price: 220,
-    quantity: 1,
-    image:
-      "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=500&q=85",
-    customization: "Fresh Farm Veggies • Extra Pesto",
-    badge: "CHEF'S SPECIAL",
-  },
+const getOrderFromResponse = (result) =>
+  result.order ||
+  result.cart ||
+  result.data?.order ||
+  result.data?.cart ||
+  result.data ||
+  result;
 
-  {
-    id: 9,
-    name: "French Fries",
-    price: 160,
-    quantity: 1,
-    image:
-      "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=500&q=85",
-    customization: "Hand-cut • Herb Salt • Roasted Garlic Dip",
-    meta: "Sides & Quick Bites",
-  },
-];
+const getOrderItemId = (item) => {
+  const menuItem = item.menuItemId;
+  return String(
+    typeof menuItem === "object"
+      ? menuItem?._id || menuItem?.id
+      : menuItem || item.id
+  );
+};
 
 /* =========================================================
    CART PAGE
@@ -50,15 +48,93 @@ const Cart = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
 
-  const [cartItems, setCartItems] =
-    useState(initialCartItems);
-
+  const [cartItems, setCartItems] = useState(() =>
+    Object.values(readStoredValue("uncleCoffeeCart", {}))
+  );
+  const booking = readStoredValue("uncleCoffeeBooking", {});
+  const dineIn = readStoredValue("uncleCoffeeDineIn", {});
+  const reservation = booking.reservation || {};
+  const bookedTable = reservation.table || {};
+  const [tables, setTables] = useState([]);
+  const [tableCode, setTableCode] = useState(
+    dineIn.tableCode ||
+      bookedTable.tableCode ||
+      (typeof reservation.tableId === "string" ? reservation.tableId : "") ||
+      ""
+  );
+  const [customerName, setCustomerName] = useState(
+    dineIn.customer?.name || booking.customer?.name || ""
+  );
+  const [mobile, setMobile] = useState(
+    dineIn.customer?.mobile || booking.customer?.mobile || ""
+  );
+  const [guestCount, setGuestCount] = useState(
+    dineIn.guestCount || reservation.guests || 2
+  );
   const [kitchenNote, setKitchenNote] = useState(
-    "Please make the cappuccino extra hot and bring food together."
+    dineIn.kitchenNote || reservation.notes || booking.customer?.notes || ""
+  );
+  const [paymentMethod, setPaymentMethod] = useState("online");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draftOrderId, setDraftOrderId] = useState(
+    localStorage.getItem("uncleCoffeeCartOrderId") || ""
   );
 
-  const [paymentMethod, setPaymentMethod] =
-    useState("online");
+  useEffect(() => {
+    let active = true;
+    requestJson("/api/tables/all")
+      .then((result) => {
+        const availableTables = (result.tables || []).filter(
+          (table) => table.isActive !== false
+        );
+        if (!active) return;
+        setTables(availableTables);
+        setTableCode((current) => {
+          const currentTable = availableTables.find((table) =>
+            [table.tableCode, table.id, table._id].includes(current)
+          );
+          if (currentTable) return currentTable.tableCode;
+          const bookingCode = bookedTable.tableCode || reservation.tableId;
+          if (
+            typeof bookingCode === "string" &&
+            availableTables.some((table) =>
+              [table.tableCode, table.id, table._id].includes(bookingCode)
+            )
+          ) {
+            return bookingCode;
+          }
+          return availableTables[0]?.tableCode || "";
+        });
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message || "Unable to load tables.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    writeStoredValue(
+      "uncleCoffeeCart",
+      Object.fromEntries(
+        cartItems.map((item) => [String(item.menuItemId || item.id), item])
+      )
+    );
+  }, [cartItems]);
+
+  useEffect(() => {
+    if (customerName || mobile || tableCode) {
+      writeStoredValue("uncleCoffeeDineIn", {
+        tableCode,
+        customer: { name: customerName, mobile },
+        guestCount: Number(guestCount),
+        kitchenNote,
+      });
+    }
+  }, [customerName, mobile, tableCode, guestCount, kitchenNote]);
 
   /* =========================================================
      QUANTITY
@@ -68,7 +144,7 @@ const Cart = () => {
     setCartItems((previousItems) =>
       previousItems
         .map((item) => {
-          if (item.id !== id) {
+          if (String(item.menuItemId || item.id) !== String(id)) {
             return item;
           }
 
@@ -88,7 +164,7 @@ const Cart = () => {
   const removeItem = (id) => {
     setCartItems((previousItems) =>
       previousItems.filter(
-        (item) => item.id !== id
+        (item) => String(item.menuItemId || item.id) !== String(id)
       )
     );
   };
@@ -113,7 +189,13 @@ const Cart = () => {
     return cartItems.reduce(
       (total, item) =>
         total +
-        item.price * item.quantity,
+        (
+          Number(item.price || 0) +
+          (item.options?.extras || []).reduce(
+            (extrasTotal, extra) => extrasTotal + Number(extra.price || 0),
+            0
+          )
+        ) * item.quantity,
       0
     );
   }, [cartItems]);
@@ -147,33 +229,177 @@ const Cart = () => {
      PLACE ORDER
      ========================================================= */
 
-  const handlePlaceOrder = () => {
-    const orderData = {
-      tableNumber: "12",
-      customerName: "Tushal",
-      items: cartItems,
-      kitchenNote,
-      paymentMethod,
-      subtotal,
-      gstAndService,
-      totalPayable,
-    };
+  const handlePlaceOrder = async () => {
+    setError("");
+    if (!cartItems.length) {
+      setError("Add at least one menu item before checkout.");
+      return;
+    }
+    if (
+      !tableCode ||
+      !customerName.trim() ||
+      mobile.replace(/\D/g, "").length < 10
+    ) {
+      setError("Select a table and enter your name and valid 10-digit mobile number.");
+      return;
+    }
 
-    console.log("Order placed:", orderData);
+    setIsSubmitting(true);
+    try {
+      let order;
+      let cartOrderId = draftOrderId;
+      if (cartOrderId) {
+        const existing = getOrderFromResponse(
+          await requestJson(`/api/orders/cart/${encodeURIComponent(cartOrderId)}`)
+        );
+        order = existing;
+      }
 
-    /*
-      Later:
-      API call will be made here.
+      if (!order || order.status === "cart") {
+        if (!order) {
+          const initialized = await requestJson("/api/orders/cart/init", {
+            method: "POST",
+            body: JSON.stringify({
+              tableId: tableCode,
+              customer: { name: customerName.trim(), mobile: mobile.trim() },
+              guestCount: Number(guestCount),
+              kitchenNote: kitchenNote.trim(),
+            }),
+          });
+          order = getOrderFromResponse(initialized);
+          cartOrderId = getOrderRouteId(order);
+          if (!cartOrderId) {
+            throw new Error("The cart API did not return an order ID.");
+          }
+          setDraftOrderId(String(cartOrderId));
+          localStorage.setItem("uncleCoffeeCartOrderId", String(cartOrderId));
+        }
 
-      Example:
+        const currentItems = order.items || [];
+        const currentById = new Map(
+          currentItems.map((item) => [getOrderItemId(item), item])
+        );
+        const desiredIds = new Set(
+          cartItems.map((item) => String(item.menuItemId || item.id))
+        );
 
-      await fetch("/api/orders", {
+        for (const existingItem of currentItems) {
+          const menuItemId = getOrderItemId(existingItem);
+          if (!desiredIds.has(menuItemId)) {
+            await requestJson(
+              `/api/orders/cart/${encodeURIComponent(cartOrderId)}/items/${encodeURIComponent(menuItemId)}`,
+              { method: "DELETE" }
+            );
+          }
+        }
+
+        for (const item of cartItems) {
+          const menuItemId = String(item.menuItemId || item.id);
+          const body = {
+            menuItemId,
+            quantity: item.quantity,
+            options: item.options || {},
+            note: item.note || "",
+          };
+          const existingItem = currentById.get(menuItemId);
+          const path = `/api/orders/cart/${encodeURIComponent(cartOrderId)}/items`;
+          await requestJson(
+            existingItem
+              ? `${path}/${encodeURIComponent(menuItemId)}`
+              : path,
+            {
+              method: existingItem ? "PATCH" : "POST",
+              body: JSON.stringify(existingItem ? {
+                quantity: body.quantity,
+                options: body.options,
+                note: body.note,
+              } : body),
+            }
+          );
+        }
+
+        const checkoutResult = await requestJson(
+          `/api/orders/cart/${encodeURIComponent(cartOrderId)}/checkout`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              paymentMethod,
+              kitchenNote: kitchenNote.trim(),
+            }),
+          }
+        );
+        order = getOrderFromResponse(checkoutResult);
+      }
+
+      const routeId = getOrderRouteId(order) || cartOrderId;
+      if (!routeId || !order.orderId) {
+        throw new Error("Checkout did not return the order identifiers.");
+      }
+      writeStoredValue("uncleCoffeeCurrentOrder", order);
+      localStorage.setItem("uncleCoffeeOrderId", String(routeId));
+      localStorage.setItem("uncleCoffeeBusinessOrderId", String(order.orderId));
+      localStorage.setItem("uncleCoffeeOrderMobile", mobile.trim());
+
+      if (paymentMethod === "counter") {
+        await requestJson("/api/payments/counter", {
+          method: "POST",
+          body: JSON.stringify({
+            orderId: order.orderId,
+            notes: "Paying at the counter",
+          }),
+        });
+        localStorage.removeItem("uncleCoffeeCartOrderId");
+        localStorage.removeItem("uncleCoffeeCart");
+        navigate("/tracking");
+        return;
+      }
+
+      const paymentOrder = await requestJson("/api/payments/create-order", {
         method: "POST",
-        body: JSON.stringify(orderData)
+        body: JSON.stringify({ orderId: order.orderId }),
       });
-    */
+      if (!paymentOrder.razorpayOrderId || !paymentOrder.keyId) {
+        throw new Error("The payment API returned incomplete Razorpay details.");
+      }
 
-    navigate("/tracking");
+      await loadRazorpay();
+      const razorpay = new window.Razorpay({
+        key: paymentOrder.keyId,
+        amount: paymentOrder.amount,
+        currency: paymentOrder.currency || "INR",
+        name: "Uncle's Coffee",
+        description: `Order ${order.orderId}`,
+        order_id: paymentOrder.razorpayOrderId,
+        prefill: {
+          name: paymentOrder.customer?.name || customerName.trim(),
+          contact: paymentOrder.customer?.mobile || mobile.trim(),
+        },
+        handler: async (razorpayResponse) => {
+          try {
+            await requestJson("/api/payments/verify", {
+              method: "POST",
+              body: JSON.stringify(razorpayResponse),
+            });
+            localStorage.removeItem("uncleCoffeeCartOrderId");
+            localStorage.removeItem("uncleCoffeeCart");
+            navigate("/tracking");
+          } catch (verificationError) {
+            setError(
+              verificationError.message ||
+                "Payment verification failed. Please contact the cafe with your order ID."
+            );
+            setIsSubmitting(false);
+          }
+        },
+        modal: {
+          ondismiss: () => setIsSubmitting(false),
+        },
+      });
+      razorpay.open();
+    } catch (requestError) {
+      setError(requestError.message || "Unable to place your order.");
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -224,24 +450,51 @@ const Cart = () => {
               TABLE INFO
           ================================================= */}
 
-          <div className="mb-6 flex justify-start lg:justify-end">
-
-            <div className="flex max-w-full flex-wrap items-center gap-2 rounded-full bg-[#EFE9DF] px-4 py-2.5 sm:gap-3 sm:px-5">
-
-              <span className="text-caramel">
-                ▱
-              </span>
-
-              <span className="text-xs font-semibold text-espresso">
-                Table 12 • Tushal
-              </span>
-
-              <span className="text-xs text-[#C9B9AA]">
-                #CC-894
-              </span>
-
-            </div>
-
+          <div className="mb-6 grid gap-3 rounded-2xl bg-[#EFE9DF] p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="text-xs font-semibold text-espresso">
+              Table
+              <select
+                value={tableCode}
+                onChange={(event) => setTableCode(event.target.value)}
+                className="mt-1 block h-10 w-full rounded-lg border border-[#EAE1D6] bg-white px-3 text-sm"
+              >
+                <option value="">Select a table</option>
+                {tables.map((table) => (
+                  <option key={table.id || table._id} value={table.tableCode}>
+                    {table.tableCode} · {table.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-espresso">
+              Name
+              <input
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                className="mt-1 block h-10 w-full rounded-lg border border-[#EAE1D6] bg-white px-3 text-sm"
+                autoComplete="name"
+              />
+            </label>
+            <label className="text-xs font-semibold text-espresso">
+              Mobile number
+              <input
+                value={mobile}
+                onChange={(event) => setMobile(event.target.value)}
+                className="mt-1 block h-10 w-full rounded-lg border border-[#EAE1D6] bg-white px-3 text-sm"
+                inputMode="tel"
+                autoComplete="tel"
+              />
+            </label>
+            <label className="text-xs font-semibold text-espresso">
+              Guests
+              <input
+                type="number"
+                min="1"
+                value={guestCount}
+                onChange={(event) => setGuestCount(Math.max(1, Number(event.target.value) || 1))}
+                className="mt-1 block h-10 w-full rounded-lg border border-[#EAE1D6] bg-white px-3 text-sm"
+              />
+            </label>
           </div>
 
           {/* =================================================
@@ -292,22 +545,22 @@ const Cart = () => {
 
                   cartItems.map((item) => (
                     <CartItem
-                      key={item.id}
+                      key={item.menuItemId || item.id}
                       item={item}
                       onIncrease={() =>
                         updateQuantity(
-                          item.id,
+                          item.menuItemId || item.id,
                           1
                         )
                       }
                       onDecrease={() =>
                         updateQuantity(
-                          item.id,
+                          item.menuItemId || item.id,
                           -1
                         )
                       }
                       onRemove={() =>
-                        removeItem(item.id)
+                        removeItem(item.menuItemId || item.id)
                       }
                     />
                   ))
@@ -355,7 +608,7 @@ const Cart = () => {
                     />
 
                     <span className="pointer-events-none absolute bottom-2 right-3 text-[9px] text-[#C9B9AA]">
-                      Note shared with Table 12
+                      Note shared with {tableCode || "your table"}
                     </span>
 
                   </div>
@@ -381,7 +634,7 @@ const Cart = () => {
                 </Link>
 
                 <span className="hidden text-xs text-[#624B3D] sm:block">
-                  Order #98124
+                  {draftOrderId ? `Cart #${draftOrderId}` : ""}
                 </span>
 
               </div>
@@ -436,7 +689,7 @@ const Cart = () => {
                       </h2>
 
                       <p className="mt-0.5 text-xs text-[#715E50]">
-                        Table 12 • Instant Table Checkout
+                        {tableCode || "Select a table"} • Instant Table Checkout
                       </p>
 
                     </div>
@@ -562,17 +815,23 @@ const Cart = () => {
                       PLACE ORDER
                   ================================================= */}
 
+                  {error && (
+                    <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                      {error}
+                    </p>
+                  )}
+
                   <button
                     type="button"
-                    disabled={
-                      cartItems.length === 0
-                    }
+                    disabled={cartItems.length === 0 || isSubmitting}
                     onClick={
                       handlePlaceOrder
                     }
                     className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-[#91431F] text-sm font-semibold text-cream shadow-[0_5px_12px_rgba(145,67,31,0.18)] transition hover:bg-caramelHover disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {t.cart.placeOrder} — ₹{totalPayable}
+                    {isSubmitting
+                      ? "Processing…"
+                      : `${t.cart.placeOrder} — ₹${totalPayable}`}
 
                     <span className="text-lg">
                       →
@@ -678,7 +937,7 @@ const Cart = () => {
             </span>
 
             <span className="font-medium text-caramel">
-              Table 12 Active
+              {tableCode ? `${tableCode} Active` : "Table not selected"}
             </span>
 
           </div>
@@ -701,8 +960,16 @@ const CartItem = ({
   onDecrease,
   onRemove,
 }) => {
-  const itemTotal =
-    item.price * item.quantity;
+  const extrasTotal = (item.options?.extras || []).reduce(
+    (total, extra) => total + Number(extra.price || 0),
+    0
+  );
+  const itemTotal = (Number(item.price || 0) + extrasTotal) * item.quantity;
+  const customization = [
+    item.options?.temperature,
+    item.options?.milk && `${item.options.milk} milk`,
+    ...(item.options?.extras || []).map((extra) => extra.name),
+  ].filter(Boolean).join(" · ");
 
   return (
     <article className="rounded-2xl bg-[#F2EDE5] p-4 sm:p-5">
@@ -714,7 +981,7 @@ const CartItem = ({
         <div className="relative h-[150px] w-full shrink-0 overflow-hidden rounded-xl sm:h-[96px] sm:w-[96px]">
 
           <img
-            src={item.image}
+            src={item.image || ""}
             alt={item.name}
             className="h-full w-full object-cover"
           />
@@ -734,7 +1001,7 @@ const CartItem = ({
               </h3>
 
               <p className="mt-1 text-xs text-[#624B3D]">
-                {item.customization}
+                {customization || item.meta || "Menu item"}
               </p>
 
               {item.badge && (
@@ -822,7 +1089,7 @@ const CartItem = ({
             </p>
 
             <p className="text-[9px] text-[#806F61]">
-              ₹{item.price} each
+              ₹{Number(item.price || 0) + extrasTotal} each
             </p>
 
           </div>

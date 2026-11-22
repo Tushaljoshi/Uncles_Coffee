@@ -6,6 +6,8 @@ const FoodDetailModal = ({
   setQuantity,
   selectedMilk,
   setSelectedMilk,
+  selectedExtras,
+  setSelectedExtras,
   selectedTemperature,
   setSelectedTemperature,
   itemNote,
@@ -91,10 +93,6 @@ const FoodDetailModal = ({
               </span>
             )}
 
-            <span className="rounded-full bg-cream px-3 py-1.5 text-[8px] font-semibold tracking-[0.05em] text-caramel">
-              Single Origin Blend
-            </span>
-
           </div>
         </div>
 
@@ -116,9 +114,16 @@ const FoodDetailModal = ({
                 </p>
               </div>
 
-              <span className="shrink-0 font-serif text-lg font-semibold text-caramel">
-                ₹{item.price}
-              </span>
+              <div className="shrink-0 text-right">
+                <p className="font-serif text-lg font-semibold text-caramel">
+                  ₹{item.price}
+                </p>
+                {item.cutoffPrice > item.price && (
+                  <p className="text-xs text-[#9D8C7E] line-through">
+                    ₹{item.cutoffPrice}
+                  </p>
+                )}
+              </div>
 
             </div>
 
@@ -161,7 +166,8 @@ const FoodDetailModal = ({
             </div>
 
             {/* ================= MILK ================= */}
-            <div className="mt-6">
+            {(item.options?.milk || []).length > 0 && (
+              <div className="mt-6">
 
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-espresso">
@@ -175,79 +181,91 @@ const FoodDetailModal = ({
 
               <div className="space-y-2">
 
-                <MilkOption
-                  label="Regular Whole Milk"
-                  price="Included"
-                  selected={selectedMilk === "regular"}
-                  onClick={() => setSelectedMilk("regular")}
-                />
-
-                <MilkOption
-                  label="Oat Milk (Barista Blend)"
-                  price="+₹30"
-                  selected={selectedMilk === "oat"}
-                  onClick={() => setSelectedMilk("oat")}
-                />
-
-                <MilkOption
-                  label="Almond Milk"
-                  price="+₹30"
-                  selected={selectedMilk === "almond"}
-                  onClick={() => setSelectedMilk("almond")}
-                />
+                {item.options.milk.map((milk) => (
+                  <MilkOption
+                    key={milk}
+                    label={`${milk} Milk`}
+                    selected={selectedMilk === milk}
+                    onClick={() => setSelectedMilk(milk)}
+                  />
+                ))}
 
               </div>
-            </div>
+              </div>
+            )}
 
             {/* ================= TEMPERATURE ================= */}
-            <div className="mt-6">
+            {(item.options?.temperature || []).length > 0 && (
+              <div className="mt-6">
 
               <h3 className="mb-2 text-sm font-semibold text-espresso">
                 Temperature
               </h3>
 
-              <div className="grid grid-cols-3 gap-2">
-
-                {[
-                  {
-                    value: "hot",
-                    label: "Hot",
-                  },
-                  {
-                    value: "extraHot",
-                    label: "Extra Hot",
-                  },
-                  {
-                    value: "iced",
-                    label: "Iced",
-                  },
-                ].map((temperature) => {
+              <div className="grid grid-cols-2 gap-2">
+                {item.options.temperature.map((temperature) => {
 
                   const active =
-                    selectedTemperature === temperature.value;
+                    selectedTemperature === temperature;
 
                   return (
                     <button
-                      key={temperature.value}
+                      key={temperature}
                       type="button"
-                      onClick={() =>
-                        setSelectedTemperature(
-                          temperature.value
-                        )
-                      }
+                      onClick={() => setSelectedTemperature(temperature)}
                       className={`rounded-xl py-3 text-xs font-medium transition ${
                         active
                           ? "bg-caramel text-cream"
                           : "bg-[#F4F0E8] text-espresso hover:bg-latte"
                       }`}
                     >
-                      {temperature.label}
+                      {temperature}
                     </button>
                   );
                 })}
 
               </div>
-            </div>
+              </div>
+            )}
+
+            {(item.options?.extras || []).length > 0 && (
+              <div className="mt-6">
+                <h3 className="mb-2 text-sm font-semibold text-espresso">
+                  Extras
+                </h3>
+                <div className="space-y-2">
+                  {item.options.extras.map((extra) => {
+                    const extraId = extra.id || extra._id || extra.name;
+                    const selected = selectedExtras.includes(extraId);
+
+                    return (
+                      <button
+                        key={extraId}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() =>
+                          setSelectedExtras((current) =>
+                            selected
+                              ? current.filter((id) => id !== extraId)
+                              : [...current, extraId]
+                          )
+                        }
+                        className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm transition ${
+                          selected
+                            ? "bg-[#F2E7DC] text-espresso"
+                            : "bg-[#F4F0E8] text-espresso hover:bg-latte"
+                        }`}
+                      >
+                        <span>{extra.name}</span>
+                        <span className="font-medium text-caramel">
+                          +₹{extra.price}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* ================= NOTE ================= */}
             <div className="mt-6">
@@ -282,7 +300,7 @@ const FoodDetailModal = ({
               {/* Total */}
               <div className="shrink-0">
                 <p className="text-[10px] text-[#715E50]">
-                  Table 12 Total
+                  Item total
                 </p>
 
                 <p className="font-serif text-xl font-semibold text-espresso">
@@ -331,7 +349,6 @@ const FoodDetailModal = ({
 
 const MilkOption = ({
   label,
-  price,
   selected,
   onClick,
 }) => {
@@ -362,17 +379,6 @@ const MilkOption = ({
       {/* Label */}
       <span className="flex-1 text-sm text-espresso">
         {label}
-      </span>
-
-      {/* Price */}
-      <span
-        className={`text-[10px] font-medium ${
-          price === "Included"
-            ? "text-[#715E50]"
-            : "text-caramel"
-        }`}
-      >
-        {price}
       </span>
 
     </button>
