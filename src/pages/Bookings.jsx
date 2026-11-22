@@ -27,7 +27,6 @@ const Booking = () => {
       const booking = localStorage.getItem(
         "uncleCoffeeBooking"
       );
-
       return booking ? JSON.parse(booking) : null;
     } catch {
       return null;
