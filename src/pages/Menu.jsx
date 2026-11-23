@@ -836,7 +836,7 @@ const MenuSection = ({
       </div>
 
       {/* Cards */}
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
 
         {section.items.map((item) => (
           <MenuCard
@@ -869,104 +869,95 @@ const MenuCard = ({
   const { t } = useLanguage();
 
   return (
-    <article
-      onClick={() =>
-        openItemModal(item)
-      }
-      aria-disabled={!canSelectItems}
-      className={`group relative overflow-hidden rounded-2xl border border-[#EFE8DE] bg-white transition duration-300 ${
-        canSelectItems
-          ? "cursor-pointer hover:-translate-y-1 hover:border-[#E4D8CA] hover:shadow-[0_14px_30px_rgba(61,35,20,0.10)]"
-          : "cursor-not-allowed opacity-75"
-      } ${
-        item.special
-          ? "bg-[#F4EEE6]"
-          : ""
-      }`}
-    >
-
-      {/* Image */}
-      {item.image && (
-        <div className="relative h-[190px] overflow-hidden">
-
+    <article className="group overflow-hidden rounded-[22px] border border-[#EEE5D9] bg-white shadow-[0_8px_24px_rgba(61,35,20,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#D9B7A2] hover:shadow-[0_16px_34px_rgba(61,35,20,0.13)]">
+      <button
+        type="button"
+        onClick={() => openItemModal(item)}
+        disabled={!canSelectItems}
+        aria-label={`View details for ${item.name}`}
+        className="relative block aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-[#EBD8C8] via-[#D9B99E] to-[#B77F5C] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#91431F] disabled:cursor-not-allowed"
+      >
+        {item.image ? (
           <img
             src={item.image}
-            alt={item.name}
+            alt=""
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(ellipse_at_50%_30%,rgba(255,255,255,0.65),transparent_60%)] text-[#6F4731]">
+            <span aria-hidden="true" className="text-5xl drop-shadow-sm">☕</span>
+            <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em]">
+              {getCategoryLabel(item.category || "coffee")}
+            </span>
+          </div>
+        )}
 
-          {item.badge && (
-            <span className="absolute left-3 top-3 max-w-[70%] truncate rounded-full bg-white/95 px-3 py-1.5 text-[9px] font-bold tracking-[0.04em] text-espresso shadow-sm backdrop-blur">
-              {item.badge}
+        <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#25150F]/55 via-transparent to-black/10" />
+
+        <span className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
+          {(item.badge || item.special) && (
+            <span className="max-w-[65%] truncate rounded-full bg-white/95 px-3 py-1.5 text-[9px] font-bold tracking-[0.04em] text-espresso shadow-sm backdrop-blur">
+              {item.badge || "House favorite"}
             </span>
           )}
-
-          {item.discountPercentage > 0 && (
-            <span className="absolute right-3 top-3 rounded-full bg-[#91431F] px-3 py-1.5 text-[10px] font-bold text-white shadow-sm">
-              {item.discountPercentage}% OFF
-            </span>
-          )}
-
-          {item.veg && (
-            <span className="absolute right-3 top-3 rounded-full bg-white/95 px-2 py-1 text-[8px] font-semibold text-success">
-              ● Veg
-            </span>
-          )}
-
-        </div>
-      )}
-
-      {/* Content */}
-      <div className="flex min-h-[190px] flex-col p-4">
-
-        <div className="flex items-start justify-between gap-3">
-
-          <div>
-
-            <h3 className="font-serif text-[18px] leading-tight text-espresso">
-              {item.name}
-            </h3>
-
-            {item.badge && !item.image && (
-              <span className="mt-1 inline-block text-[7px] font-bold uppercase tracking-[0.08em] text-caramel">
-                {item.badge}
+          <span className="ml-auto flex flex-col items-end gap-1.5">
+            {item.discountPercentage > 0 && (
+              <span className="rounded-full bg-[#91431F] px-3 py-1.5 text-[10px] font-bold text-white shadow-sm">
+                {item.discountPercentage}% OFF
               </span>
             )}
+            {item.veg && (
+              <span className="rounded-full bg-white/95 px-2.5 py-1 text-[9px] font-semibold text-success shadow-sm">
+                ● Veg
+              </span>
+            )}
+          </span>
+        </span>
 
-          </div>
+        {canSelectItems && (
+          <span className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-2 text-[10px] font-semibold text-espresso opacity-0 shadow-md transition duration-200 group-hover:opacity-100">
+            View details <span aria-hidden="true">↗</span>
+          </span>
+        )}
+      </button>
+
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="min-w-0 font-serif text-[19px] leading-tight text-espresso">
+            <button
+              type="button"
+              onClick={() => openItemModal(item)}
+              disabled={!canSelectItems}
+              className="text-left transition-colors hover:text-caramel focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caramel/40 disabled:cursor-not-allowed"
+            >
+              {item.name}
+            </button>
+          </h3>
 
           <div className="shrink-0 text-right">
-            <p className="font-serif text-base font-semibold text-caramel">
+            <p className="font-serif text-lg font-semibold leading-tight text-caramel">
               ₹{item.price}
             </p>
             {item.cutoffPrice > item.price && (
-              <p className="text-[10px] text-[#9D8C7E] line-through">
+              <p className="mt-1 text-[10px] text-[#9D8C7E] line-through">
                 ₹{item.cutoffPrice}
               </p>
             )}
-            {!item.image && item.discountPercentage > 0 && (
-              <p className="mt-1 text-[9px] font-bold text-[#91431F]">
-                {item.discountPercentage}% OFF
-              </p>
-            )}
           </div>
-
         </div>
 
-        {/* Description */}
-        <p className="mt-2 min-h-8 overflow-hidden text-[11px] leading-4 text-[#715E50]">
-          {item.description}
-        </p>
+        {typeof item.description === "string" && item.description.trim() && (
+          <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#715E50]">
+            {item.description}
+          </p>
+        )}
 
-        {/* Bottom */}
-        <div className="mt-auto flex items-end justify-between gap-3 pt-5">
-
-          <span className="text-[9px] font-medium tracking-[0.04em] text-[#806F61]">
-            {item.meta}
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-[#F0E9E1] pt-3">
+          <span className="min-w-0 truncate text-[10px] font-medium tracking-[0.04em] text-[#806F61]">
+            {item.meta || getCategoryLabel(item.category || "other")}
           </span>
 
           {quantity > 0 ? (
-
             <QuantityControl
               quantity={quantity}
               onDecrease={(event) => {
@@ -979,9 +970,7 @@ const MenuCard = ({
                 updateCart(item, 1);
               }}
             />
-
           ) : (
-
             <button
               type="button"
               onClick={(event) => {
@@ -989,26 +978,13 @@ const MenuCard = ({
                 updateCart(item, 1);
               }}
               disabled={!canSelectItems}
-              className="flex items-center gap-1.5 rounded-full bg-caramel px-4 py-2.5 text-[10px] font-semibold text-cream transition hover:bg-caramelHover disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-full bg-caramel px-4 py-2.5 text-[10px] font-semibold text-cream transition hover:bg-caramelHover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caramel focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               + {t.menu.add}
             </button>
-
           )}
-
         </div>
-
-        {/* Special decoration */}
-        {item.special && (
-          <div className="pointer-events-none absolute -bottom-8 -right-8 flex h-24 w-24 items-center justify-center rounded-full bg-[#F8E7DC]">
-            <span className="text-caramel">
-              ♧
-            </span>
-          </div>
-        )}
-
       </div>
-
     </article>
   );
 };

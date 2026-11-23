@@ -32,9 +32,9 @@ const Welcome = () => {
   const selectedTableImage =
     selectedTable?.imageUrl || selectedTable?.image
       ? new URL(
-          selectedTable.imageUrl || selectedTable.image,
-          API_BASE_URL
-        ).toString()
+        selectedTable.imageUrl || selectedTable.image,
+        API_BASE_URL
+      ).toString()
       : "";
 
   useEffect(() => {
@@ -138,10 +138,10 @@ const Welcome = () => {
               cutoffPrice,
               discountPercentage: Number(
                 item.PercentageOff ??
-                  item.percentageOff ??
-                  (cutoffPrice > price
-                    ? Math.round(((cutoffPrice - price) / cutoffPrice) * 100)
-                    : 0)
+                item.percentageOff ??
+                (cutoffPrice > price
+                  ? Math.round(((cutoffPrice - price) / cutoffPrice) * 100)
+                  : 0)
               ),
               tag: Array.isArray(item.badges)
                 ? item.badges[0] || ""
@@ -242,10 +242,10 @@ const Welcome = () => {
       {/* ================= HERO ================= */}
       <main>
         <section className="mx-auto max-w-[1240px] px-4 pb-8 pt-7 sm:px-6 sm:pb-10 sm:pt-10 lg:px-8 lg:pb-16 lg:pt-12">
-          <div className="grid items-start gap-8 sm:gap-10 lg:grid-cols-[1.55fr_1fr] lg:gap-12">
+          <div className="grid items-stretch gap-8 sm:gap-10 lg:grid-cols-[1.55fr_1fr] lg:gap-12">
 
             {/* ================= LEFT CONTENT ================= */}
-            <div>
+            <div className="flex flex-col">
               {/* Small Tags */}
               <div className="mb-6 flex flex-wrap items-center gap-2 sm:mb-7">
                 <span className="rounded-full bg-[#EFE9DF] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-caramel">
@@ -262,8 +262,8 @@ const Welcome = () => {
               </div>
 
               {/* Heading */}
-              <h2 className="max-w-[650px] font-serif text-[40px] font-medium leading-[1] tracking-[-0.035em] text-espresso sm:text-[56px] lg:text-[60px]">
-                  {t.welcome.title}
+              <h2 className="max-w-[650px] font-serif text-[30px] font-medium leading-[1] tracking-[-0.035em] text-espresso sm:text-[56px] lg:text-[60px]">
+                {t.welcome.title}
               </h2>
 
               {/* Description */}
@@ -272,70 +272,127 @@ const Welcome = () => {
               </p>
 
               {/* ================= HERO IMAGE ================= */}
-              <div className="relative mt-7 h-[280px] overflow-hidden rounded-[18px] bg-gradient-to-br from-[#E9D7C6] via-[#D4B89D] to-[#A97957] shadow-[0_14px_35px_rgba(61,35,20,0.12)] sm:h-[390px]">
+              <div
+                className={`relative mt-7 h-[250px] overflow-hidden rounded-[18px] shadow-[0_14px_35px_rgba(61,35,20,0.12)] sm:h-[390px] ${selectedTable
+                    ? "bg-gradient-to-br from-[#E9D7C6] via-[#D4B89D] to-[#A97957]"
+                    : "bg-[#F6F0E7]"
+                  }`}
+              >
                 {selectedTableImage ? (
                   <img
                     src={selectedTableImage}
                     alt={selectedTable?.name || "Selected available table"}
                     className="h-full w-full object-cover"
                   />
+                ) : !selectedTable ? (
+                  <img
+                    src="/welcome-coffee.png"
+                    alt="Uncle's Coffee — perfect brew, every time"
+                    className="h-full w-full object-contain"
+                  />
                 ) : (
                   <div className="flex h-full items-center justify-center text-6xl text-white/80">
                     ▱
                   </div>
                 )}
-                <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3 sm:inset-x-4 sm:bottom-4 sm:gap-4">
-                  <div className="max-w-[calc(100%-8px)] rounded-2xl bg-cream/95 p-3 shadow-lg backdrop-blur-sm sm:max-w-[310px] sm:p-4">
-                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-caramel">
-                      {selectedTable ? "Available table" : "Choose a table"}
-                    </p>
-                    <h3 className="mt-1 font-serif text-lg leading-tight text-espresso sm:text-xl">
-                      {selectedTable?.name || "Table details"}
-                    </h3>
-                    <p className="mt-1 text-[11px] leading-4 text-[#624B3D] sm:text-xs sm:leading-5">
-                      {selectedTable
-                        ? `${selectedTable.tableCode} · ${selectedTable.location || selectedTable.area || ""}${selectedTable.capacity ? ` · Seats ${selectedTable.capacity}` : ""}`
-                        : "Available seating options will appear here."}
-                    </p>
-                  </div>
-                  {selectedTable && (
+                {selectedTable && (
+                  <div className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3 sm:inset-x-4 sm:bottom-4 sm:gap-4">
+                    <div className="max-w-[calc(100%-8px)] rounded-2xl bg-cream/95 p-3 shadow-lg backdrop-blur-sm sm:max-w-[310px] sm:p-4">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-caramel">
+                        Available table
+                      </p>
+                      <h3 className="mt-1 font-serif text-lg leading-tight text-espresso sm:text-xl">
+                        {selectedTable.name}
+                      </h3>
+                      <p className="mt-1 text-[11px] leading-4 text-[#624B3D] sm:text-xs sm:leading-5">
+                        {`${selectedTable.tableCode} · ${selectedTable.location || selectedTable.area || ""}${selectedTable.capacity ? ` · Seats ${selectedTable.capacity}` : ""}`}
+                      </p>
+                    </div>
                     <div className="hidden items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-xs font-medium text-espresso shadow-lg sm:flex">
                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
                       Available
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
-              {/* ================= FEATURE CARDS ================= */}
-              <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <FeatureCard
-                  icon="⌗"
-                  title="Available tables"
-                  description={`${tables.length} currently available`}
-                />
+              <div className="mt-8 grid overflow-hidden rounded-[24px] border border-[#E8DED0] shadow-[0_16px_40px_rgba(61,35,20,0.09)] transition-shadow duration-300 hover:shadow-[0_20px_48px_rgba(61,35,20,0.13)] sm:mt-10 sm:grid-cols-2 lg:flex-1">
+                <div className="relative isolate flex min-h-[220px] flex-col items-start justify-center overflow-hidden bg-gradient-to-br from-[#573725] via-[#3D2314] to-[#2D1A11] p-5 text-[#FAF6EE] sm:p-7 lg:p-8">
+                  <div aria-hidden="true" className="absolute -right-14 -top-20 -z-10 h-64 w-64 rounded-full border border-white/10" />
+                  <div aria-hidden="true" className="absolute -right-4 -top-10 -z-10 h-44 w-44 rounded-full border border-white/10" />
+                  <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#F0C3A8] backdrop-blur">
+                    Your coffee break
+                  </span>
+                  <h3 className="mt-4 max-w-md font-serif text-[28px] leading-[1.08] tracking-[-0.02em] sm:text-[32px]">
+                    A little pause, made better.
+                  </h3>
+                  <p className="mt-2 max-w-md text-sm leading-6 text-white/70">
+                    Find your spot, settle in, and enjoy something delicious.
+                  </p>
+                  <div className="mt-4 flex w-full flex-wrap items-center gap-3">
+                    <a
+                      href="#available-table"
+                      className="group inline-flex min-h-11 items-center gap-3 rounded-full bg-[#D39B7D] px-5 py-3 text-xs font-semibold text-[#2D1A11] shadow-lg shadow-black/10 transition duration-200 hover:-translate-y-0.5 hover:bg-[#E1AE91] hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#3D2314]"
+                    >
+                      Find your table
+                      <span className="transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true">→</span>
+                    </a>
+                    <span className="text-xs text-white/60">
+                      {tables.length} {tables.length === 1 ? "table" : "tables"} available
+                    </span>
+                  </div>
+                </div>
 
-                <FeatureCard
-                  icon="☕"
-                  title="Guest details"
-                  description={
-                    guests > 0
-                      ? `${guests} ${guests === 1 ? "guest" : "guests"} selected`
-                      : "Guest count required"
-                  }
-                />
-
-                <FeatureCard
-                  icon="▣"
-                  title="Order setup"
-                  description="Continue to the menu when ready"
-                />
+                <div className="flex flex-col justify-center gap-3 bg-[#FBF8F2] p-5 sm:p-7 lg:p-8">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9A7158]">
+                    Your visit, in two steps
+                  </p>
+                  <a
+                    href="#available-table"
+                    className="group flex items-center gap-4 rounded-2xl border border-[#EEE5D9] bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#D9B7A2] hover:shadow-[0_10px_24px_rgba(61,35,20,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A66B4D]"
+                  >
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${selectedTable ? "bg-[#E8F0E7] text-[#52704F]" : "bg-[#F4D8CA] text-caramel"}`}>
+                      {selectedTable ? "✓" : "01"}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-espresso">Choose your table</span>
+                        <span className="text-xs text-[#9A7158] transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#715E50]">
+                        {selectedTable ? `${selectedTable.tableCode} selected` : "Pick the spot that suits you"}
+                      </span>
+                    </span>
+                  </a>
+                  <a
+                    href="#guest-count"
+                    className="group flex items-center gap-4 rounded-2xl border border-[#EEE5D9] bg-white p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[#D9B7A2] hover:shadow-[0_10px_24px_rgba(61,35,20,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A66B4D]"
+                  >
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${guests > 0 ? "bg-[#E8F0E7] text-[#52704F]" : "bg-[#F4D8CA] text-caramel"}`}>
+                      {guests > 0 ? "✓" : "02"}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-espresso">Add your guest details</span>
+                        <span className="text-xs text-[#9A7158] transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#715E50]">
+                        {guests > 0
+                          ? `${guests} ${guests === 1 ? "guest" : "guests"} added`
+                          : "Tell us how many are joining"}
+                      </span>
+                    </span>
+                  </a>
+                  <p className="px-1 pt-1 text-[11px] leading-5 text-[#8A786A]">
+                    No account needed. Your order starts when you’re ready.
+                  </p>
+                </div>
               </div>
             </div>
 
             {/* ================= RIGHT ORDER SETUP CARD ================= */}
-            <div className="lg:pt-1">
-              <div className="rounded-[22px] bg-[#F0ECE5] p-5 shadow-[0_15px_30px_rgba(61,35,20,0.10)] sm:p-7">
+            <div className="lg:flex lg:flex-col lg:pt-1">
+              <div className="flex flex-col rounded-[22px] border border-[#E8DED0] bg-gradient-to-b from-[#F8F4ED] to-[#F0ECE5] p-5 shadow-[0_15px_30px_rgba(61,35,20,0.10)] sm:p-7 lg:flex-1">
 
                 {/* Card Header */}
                 <div className="flex items-start justify-between">
@@ -413,58 +470,60 @@ const Welcome = () => {
                   )}
                 </div>
 
-                {/* Customer Name */}
-                <div className="mt-5">
-                  <div className="mb-2 flex items-center justify-between">
+                <div className="mt-5 grid gap-5 xl:grid-cols-2">
+                  {/* Customer Name */}
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label
+                        htmlFor="customerName"
+                        className="text-xs font-medium text-espresso"
+                      >
+                        {t.welcome.customerName}
+                      </label>
+
+                      <span className="text-[11px] text-[#715E50]">
+                        Required
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 rounded-xl border border-transparent bg-white px-4 py-3.5 transition focus-within:border-[#C79A7B] focus-within:ring-2 focus-within:ring-caramel/10">
+                      <span className="text-lg text-caramel" aria-hidden="true">♙</span>
+
+                      <input
+                        id="customerName"
+                        type="text"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Your name"
+                        className="w-full bg-transparent text-sm font-semibold text-espresso outline-none placeholder:text-[#A89788]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Customer mobile */}
+                  <div>
                     <label
-                      htmlFor="customerName"
-                      className="text-xs font-medium text-espresso"
+                      htmlFor="customerMobile"
+                      className="mb-2 block text-xs font-medium text-espresso"
                     >
-                      {t.welcome.customerName}
+                      Mobile number
                     </label>
-
-                    <span className="text-[11px] text-[#715E50]">
-                      Required
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3.5">
-                    <span className="text-lg text-caramel">♙</span>
-
-                    <input
-                      id="customerName"
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Your name"
-                      className="w-full bg-transparent text-sm font-semibold text-espresso outline-none placeholder:text-[#A89788]"
-                    />
-                  </div>
-                </div>
-
-                {/* Customer mobile */}
-                <div className="mt-5">
-                  <label
-                    htmlFor="customerMobile"
-                    className="mb-2 block text-xs font-medium text-espresso"
-                  >
-                    Mobile number
-                  </label>
-                  <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3.5">
-                    <span className="text-lg text-caramel">☎</span>
-                    <input
-                      id="customerMobile"
-                      type="tel"
-                      value={mobile}
-                      onChange={(event) => {
-                        setMobile(event.target.value);
-                        setFormError("");
-                      }}
-                      inputMode="tel"
-                      autoComplete="tel"
-                      placeholder="10-digit mobile number"
-                      className="w-full bg-transparent text-sm font-semibold text-espresso outline-none placeholder:text-[#A89788]"
-                    />
+                    <div className="flex items-center gap-3 rounded-xl border border-transparent bg-white px-4 py-3.5 transition focus-within:border-[#C79A7B] focus-within:ring-2 focus-within:ring-caramel/10">
+                      <span className="text-lg text-caramel" aria-hidden="true">☎</span>
+                      <input
+                        id="customerMobile"
+                        type="tel"
+                        value={mobile}
+                        onChange={(event) => {
+                          setMobile(event.target.value);
+                          setFormError("");
+                        }}
+                        inputMode="tel"
+                        autoComplete="tel"
+                        placeholder="10-digit number"
+                        className="w-full bg-transparent text-sm font-semibold text-espresso outline-none placeholder:text-[#A89788]"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -485,7 +544,7 @@ const Welcome = () => {
 
                   <textarea
                     id="kitchenNote"
-                    rows="3"
+                    rows="2"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="Less spicy, extra hot, no onions..."
@@ -517,6 +576,7 @@ const Welcome = () => {
                         −
                       </button>
                       <input
+                        id="guest-count"
                         aria-label="Number of guests"
                         type="number"
                         min="1"
@@ -556,60 +616,69 @@ const Welcome = () => {
                   </div>
                 </div>
 
+                <div className="my-5 h-28 overflow-hidden rounded-2xl border border-[#E8DED0] bg-[#F0ECE5] shadow-inner sm:h-36 xl:min-h-[140px] xl:flex-1">
+                  <img
+                    src="/coffee-quote.jpg"
+                    alt="Coffee beans with the quote: Life begins after coffee"
+                    className="h-full w-full object-cover object-center"
+                  />
+                </div>
+
                 {/* CTA */}
-                {(!selectedTable ||
-                  guests < 1 ||
-                  !customerName.trim() ||
-                  mobile.replace(/\D/g, "").length < 10) && (
-                  <p className="mt-5 text-center text-xs text-[#715E50]">
-                    Choose a table, set the guest count, and enter your name and mobile number to continue.
-                  </p>
-                )}
-                {formError && (
-                  <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
-                    {formError}
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={handleViewMenu}
-                  disabled={
-                    isSubmitting ||
-                    isLoadingTables ||
-                    !selectedTable ||
+                <div className="mt-6 xl:mt-auto xl:pt-6">
+                  {(!selectedTable ||
                     guests < 1 ||
                     !customerName.trim() ||
-                    mobile.replace(/\D/g, "").length < 10 ||
-                    tables.length === 0
-                  }
-                  className="mt-7 flex w-full items-center justify-center gap-3 rounded-full bg-caramel px-6 py-4 text-sm font-semibold text-cream shadow-sm transition hover:bg-caramelHover hover:shadow-md active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSubmitting ? "Starting order…" : t.welcome.viewMenu}
-
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    mobile.replace(/\D/g, "").length < 10) && (
+                    <p className="text-center text-xs leading-5 text-[#715E50]">
+                      Choose a table, set the guest count, and enter your name and mobile number to continue.
+                    </p>
+                  )}
+                  {formError && (
+                    <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
+                      {formError}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleViewMenu}
+                    disabled={
+                      isSubmitting ||
+                      isLoadingTables ||
+                      !selectedTable ||
+                      guests < 1 ||
+                      !customerName.trim() ||
+                      mobile.replace(/\D/g, "").length < 10 ||
+                      tables.length === 0
+                    }
+                    className="mt-5 flex min-h-14 w-full items-center justify-center gap-3 rounded-full bg-caramel px-6 py-4 text-sm font-semibold text-cream shadow-[0_8px_18px_rgba(145,67,31,0.18)] transition duration-200 hover:-translate-y-0.5 hover:bg-caramelHover hover:shadow-[0_12px_24px_rgba(145,67,31,0.24)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                   >
-                    <path d="M5 12h14" />
-                    <path d="m13 6 6 6-6 6" />
-                  </svg>
-                </button>
+                    {isSubmitting ? "Starting order…" : t.welcome.viewMenu}
 
-                {/* Help */}
-                <p className="mt-6 text-center text-[11px] leading-5 text-[#715E50]">
-                  Need assistance? Please contact a staff member at the cafe.
-                </p>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M5 12h14" />
+                      <path d="m13 6 6 6-6 6" />
+                    </svg>
+                  </button>
+
+                  {/* Help */}
+                  <p className="mt-5 text-center text-[11px] leading-5 text-[#715E50]">
+                    Need assistance? Please contact a staff member at the cafe.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </section>
-
         {/* ================= MENU PREVIEW ================= */}
         <section className="border-t border-[#EEE5D9] bg-[#FBF8F2]">
           <div className="mx-auto max-w-[1240px] px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
@@ -703,11 +772,9 @@ const FeatureCard = ({ icon, title, description }) => {
     </div>
   );
 };
-
 /* =========================================================
    MENU ITEM CARD
 ========================================================= */
-
 const MenuItemCard = ({
   image,
   title,
